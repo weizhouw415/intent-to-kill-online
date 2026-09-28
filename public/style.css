@@ -12,6 +12,9 @@
 @media(max-width:700px){.handoff-card{padding:24px}.handoff-card h1{font-size:27px}.mode-heading small{font-size:9px}}
 .single-number{background:#3f7888}.single-start{background:#356f80}.single-start:hover{background:#285d6c}.ai-badge{font-size:10px;font-weight:900;letter-spacing:.06em;color:#d8f0e9;border:1px solid #5d8e86;background:#38545a;padding:7px 10px;border-radius:2px;white-space:nowrap}
 
+/* Lobby mode selector */
+.lobby-form{max-width:620px}.play-mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.play-mode-card{min-width:0;display:grid;grid-template-columns:38px 1fr auto;align-items:center;gap:10px;text-align:left;border:1px solid #b8b3a8;background:#f1eee7;color:#65635e;padding:12px;transition:.18s ease}.play-mode-card:hover{border-color:#77766f;background:#f8f6f0}.play-mode-card.active{border-color:#28313b;background:#28313b;color:#fff;box-shadow:inset 0 -3px #3e8293}.play-mode-card .mode-icon{width:36px;height:36px;display:grid;place-items:center;border:1px solid currentColor;font-size:18px}.play-mode-card b,.offline-card b{display:block;font-size:13px}.play-mode-card small,.offline-card small,.panel-heading small,.role-setting small,.local-note small{display:block;font-size:9px;line-height:1.45;color:#88837a;margin-top:2px}.play-mode-card.active small{color:#c9cdd0}.play-mode-card i{font-style:normal;font-size:9px;font-weight:900;align-self:start;opacity:.65}.mode-panel{margin-top:10px;border:1px solid #cbc5b9;background:#faf8f2;padding:12px}.panel-heading{display:flex;align-items:baseline;gap:9px;margin-bottom:9px}.panel-heading>b{font-size:13px}.panel-heading>small{margin-left:auto}.offline-options{display:grid;grid-template-columns:1fr 1fr;gap:8px}.offline-card{min-width:0;display:grid;grid-template-columns:35px 1fr auto;align-items:center;gap:9px;text-align:left;border:1px solid #c2beb4;background:#f4f1e9;color:#474843;padding:10px}.offline-card:hover{border-color:#6c777a}.offline-card.active{border-color:#3d7a89;background:#e2eceb;color:#24343a;box-shadow:inset 3px 0 #3d7a89}.offline-card i{font-style:normal;color:#3d7a89}.option-mark{width:34px;height:34px;display:grid;place-items:center;background:#3d7a89;color:white;font-size:10px;font-weight:900;letter-spacing:.04em}.option-mark.people{background:#a44049}.role-setting{display:flex;align-items:center;justify-content:space-between;gap:15px;margin:9px 0;padding:9px 10px;background:#ece9e1;border-left:3px solid #3d7a89}.role-setting>div:first-child>b{font-size:11px}.role-row.compact{width:min(250px,58%);margin:0}.role-row.compact span{padding:7px 12px;font-size:10px}.launch-button{margin-top:0}.local-note{display:flex;align-items:center;gap:10px;margin:9px 0;padding:8px 10px;background:#eee7df;border-left:3px solid #a44049}.local-note>span{font-size:23px;color:#a44049}.local-note p{margin:0}.local-note b{display:block;font-size:11px}.online-role{margin-top:0}.online-panel .or-line{margin:9px 0}.online-panel .join-row input{background:#fff}.online-panel .join-row .secondary{white-space:nowrap}
+
 /* Landing page: keep the complete launch panel inside the first viewport. */
 @media (min-width:1081px){
   body{overflow:hidden}
@@ -27,7 +30,7 @@
   .sublead{font-size:11px;line-height:1.45;max-width:560px}
   .rule-badges{gap:8px;margin:10px 0}
   .rule-badges span{font-size:10px;padding:5px 9px}
-  .lobby-form{padding:10px 12px;max-width:600px}
+  .lobby-form{padding:10px 12px;max-width:620px}
   .mode-heading{gap:8px;margin-bottom:6px}
   .mode-heading b{font-size:12px}
   .mode-heading small{font-size:9px;margin-top:1px}
@@ -78,4 +81,5 @@
   .mode-heading{gap:7px;margin-bottom:5px}.mode-heading b{font-size:11px}.mode-heading small{font-size:8px}.mode-number{min-width:21px;height:21px}
   .role-row{gap:5px;margin-bottom:6px}.role-row span{padding:7px 4px;font-size:10px}.lobby-form .primary{padding:9px 11px;font-size:11px}
   .mode-divider{margin:8px 0}.or-line{font-size:9px;margin:7px 0}.join-row input,.join-row .secondary{padding:7px 8px;font-size:10px}.credit{font-size:8px;margin-top:9px}
+  .play-mode-card{grid-template-columns:30px 1fr;padding:9px 8px;gap:7px}.play-mode-card .mode-icon{width:29px;height:29px;font-size:14px}.play-mode-card i{display:none}.play-mode-card b{font-size:11px}.play-mode-card small{font-size:8px}.mode-panel{padding:9px}.panel-heading>small{display:none}.offline-options{gap:6px}.offline-card{grid-template-columns:29px 1fr;padding:8px 6px;gap:6px}.offline-card i{display:none}.offline-card b{font-size:10px}.offline-card small{font-size:7px}.option-mark{width:28px;height:28px;font-size:8px}.role-setting{padding:7px 8px;margin:7px 0}.role-setting>div:first-child{display:none}.role-row.compact{width:100%}.local-note{margin:7px 0;padding:6px 8px}.local-note small{font-size:8px}
 }

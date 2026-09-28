@@ -16,6 +16,8 @@ let stream = null;
 let busy = false;
 let joinCode = inviteCode;
 let inviteOrigin = location.origin;
+let lobbyMode = inviteCode ? 'online' : 'offline';
+let offlineType = 'ai';
 const palette = ['#169472','#354caf','#db4387','#b84239','#d8ab34','#6c6f94','#c4793b','#3b8a91','#6d8743'];
 const groupPalette = { '权威': 1, '媒体': 2, '边缘人': 5, '医疗': 0, '政府': 4, '劳工': 6, '罪犯': 3, '名流': 7, '移民': 8 };
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -138,25 +140,41 @@ function renderLobby() {
       <div class="lobby-top"><span class="eyebrow">1960s · Crime dossier</span><span class="paperclip">⌁</span></div>
       <div class="lobby-main">
         <section class="lobby-copy">
-          <p class="case-no">CASE FILE 006 / 单人或双人对战</p>
+          <p class="case-no">CASE FILE 006 / 选择你的调查方式</p>
           <h1>暗藏<br><span>杀机</span></h1>
           <p class="en-title">INTENT TO KILL</p>
           <p class="lead">这座城里，每个人都有嫌疑。</p>
           <p class="sublead">一人制造案件、隐藏身份与动机；一人追踪证词、监视嫌疑人。五起命案之后，真相只允许一个答案。</p>
-          <div class="rule-badges"><span>单人、同机或联网</span><span>逻辑模式</span><span>约 45 分钟</span></div>
+          <div class="rule-badges"><span>单机或联网</span><span>逻辑模式</span><span>约 45 分钟</span></div>
           <div class="lobby-form">
-            <div class="mode-heading"><span class="mode-number single-number">01</span><div><b>单人挑战电脑</b><small>选择你的身份，电脑自动扮演另一方</small></div></div>
-            <div class="role-row"><label><input type="radio" name="single-role" value="detective" checked><span>我扮演侦探</span></label><label><input type="radio" name="single-role" value="killer"><span>我扮演凶手</span></label></div>
-            <button class="primary single-start" data-ui="create-single">开始单人对局 <b>→</b></button>
-            <div class="mode-divider"></div>
-            <div class="mode-heading"><span class="mode-number">02</span><div><b>同一台电脑</b><small>两人轮流操作，交接时自动遮挡棋盘</small></div></div>
-            <button class="primary local-start" data-ui="create-local">开始同机双人对战 <b>→</b></button>
-            <div class="mode-divider"></div>
-            <div class="mode-heading"><span class="mode-number">03</span><div><b>两台电脑联机</b><small>创建房间后，将链接或房间码发给对方</small></div></div>
-            <div class="role-row"><label><input type="radio" name="role" value="killer" checked><span>我扮演凶手</span></label><label><input type="radio" name="role" value="detective"><span>我扮演侦探</span></label></div>
-            <button class="primary" data-ui="create">创建房间 <b>↗</b></button>
-            <div class="or-line"><span>或者用房间码加入</span></div>
-            <div class="join-row"><input id="join-code" maxlength="6" autocomplete="off" placeholder="输入 6 位房间码" value="${escapeHtml(joinCode)}"><button class="secondary" data-ui="join">加入对局</button></div>
+            <div class="play-mode-grid" role="tablist" aria-label="选择游戏模式">
+              <button class="play-mode-card ${lobbyMode === 'offline' ? 'active' : ''}" data-ui="mode-offline" role="tab" aria-selected="${lobbyMode === 'offline'}">
+                <span class="mode-icon">▰</span><span><b>单机模式</b><small>一台设备，立即开始</small></span><i>01</i>
+              </button>
+              <button class="play-mode-card ${lobbyMode === 'online' ? 'active' : ''}" data-ui="mode-online" role="tab" aria-selected="${lobbyMode === 'online'}">
+                <span class="mode-icon">⌁</span><span><b>联网模式</b><small>创建或加入线上房间</small></span><i>02</i>
+              </button>
+            </div>
+            ${lobbyMode === 'offline' ? `<section class="mode-panel" aria-label="单机模式设置">
+              <div class="panel-heading"><span class="eyebrow">OFFLINE PLAY</span><b>选择对战方式</b></div>
+              <div class="offline-options">
+                <button class="offline-card ${offlineType === 'ai' ? 'active' : ''}" data-ui="offline-ai">
+                  <span class="option-mark">AI</span><span><b>与 AI 对战</b><small>电脑自动扮演另一方</small></span><i>${offlineType === 'ai' ? '●' : '○'}</i>
+                </button>
+                <button class="offline-card ${offlineType === 'local' ? 'active' : ''}" data-ui="offline-local">
+                  <span class="option-mark people">2P</span><span><b>双人对战</b><small>轮流操作，自动遮挡秘密</small></span><i>${offlineType === 'local' ? '●' : '○'}</i>
+                </button>
+              </div>
+              ${offlineType === 'ai' ? `<div class="role-setting"><div><b>选择你的身份</b><small>AI 将自动扮演另一方</small></div><div class="role-row compact"><label><input type="radio" name="single-role" value="detective" checked><span>侦探</span></label><label><input type="radio" name="single-role" value="killer"><span>凶手</span></label></div></div>
+              <button class="primary single-start launch-button" data-ui="create-single"><span>开始与 AI 对战</span><b>→</b></button>` : `<div class="local-note"><span>↔</span><p><b>交接屏幕，守住秘密</b><small>每次换人时会自动遮挡棋盘，确认身份后才显示内容。</small></p></div>
+              <button class="primary launch-button" data-ui="create-local"><span>开始双人对战</span><b>→</b></button>`}
+            </section>` : `<section class="mode-panel online-panel" aria-label="联网模式设置">
+              <div class="panel-heading"><span class="eyebrow">ONLINE PLAY</span><b>创建新房间</b><small>选择身份后，将房间码发给好友</small></div>
+              <div class="role-setting online-role"><div><b>我想扮演</b></div><div class="role-row compact"><label><input type="radio" name="role" value="killer" checked><span>凶手</span></label><label><input type="radio" name="role" value="detective"><span>侦探</span></label></div></div>
+              <button class="primary launch-button" data-ui="create"><span>创建线上房间</span><b>↗</b></button>
+              <div class="or-line"><span>已有房间码</span></div>
+              <div class="join-row"><input id="join-code" maxlength="6" autocomplete="off" inputmode="text" placeholder="输入 6 位房间码" value="${escapeHtml(joinCode)}"><button class="secondary" data-ui="join">加入对局</button></div>
+            </section>`}
           </div>
           <p class="credit">依据 Arthur Khodzhikov 桌游的双人逻辑模式制作 · 人物插画为本项目原创</p>
         </section>
@@ -303,6 +321,10 @@ app.addEventListener('click', async event => {
   const block = event.target.closest('[data-block]');
   if (ui) {
     switch (ui.dataset.ui) {
+      case 'mode-offline': lobbyMode = 'offline'; render(); break;
+      case 'mode-online': lobbyMode = 'online'; render(); break;
+      case 'offline-ai': offlineType = 'ai'; render(); break;
+      case 'offline-local': offlineType = 'local'; render(); break;
       case 'create-single': {
         try { const role = document.querySelector('input[name="single-role"]:checked').value; setSession(await request('/api/single', { method:'POST', body:JSON.stringify({role}) })); }
         catch (e) { toast(e.message, true); } break;
