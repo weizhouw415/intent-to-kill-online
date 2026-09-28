@@ -5,6 +5,7 @@ import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { networkInterfaces } from 'node:os';
 import { act, createGame, joinGame, roleForToken, viewFor } from './game.js';
+import { advanceAI, rememberHumanAnswer } from './ai.js';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(root, 'public');
@@ -92,6 +93,19 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
     if (url.pathname === '/api/config' && req.method === 'GET') return json(res, 200, { publicUrl: publicOrigin(req) });
+    if (url.pathname === '/api/single' && req.method === 'POST') {
+      const input = await body(req);
+      if (!['killer', 'detective'].includes(input.role)) return error(res, 400, '请选择角色');
+      const humanToken = token(), computerToken = token();
+      const computerRole = input.role === 'killer' ? 'detective' : 'killer';
+      const game = createGame(code(), input.role, humanToken);
+      game.mode = 'single';
+      game.ai = { role: computerRole, humanRole: input.role, answers: [] };
+      joinGame(game, computerRole, computerToken);
+      advanceAI(game);
+      rooms.set(game.code, game); save();
+      return json(res, 201, { code: game.code, mode: 'single', token: humanToken, role: input.role, computerRole });
+    }
     if (url.pathname === '/api/local' && req.method === 'POST') {
       const killer = token(), detective = token();
       const game = createGame(code(), 'killer', killer);
@@ -105,6 +119,7 @@ const server = http.createServer(async (req, res) => {
       if (!['killer', 'detective'].includes(input.role)) return error(res, 400, '请选择角色');
       const session = token();
       const game = createGame(code(), input.role, session);
+      game.mode = 'online';
       rooms.set(game.code, game); save();
       return json(res, 201, { code: game.code, mode: 'online', token: session, role: input.role });
     }
@@ -112,6 +127,7 @@ const server = http.createServer(async (req, res) => {
       const input = await body(req);
       const room = rooms.get(String(input.code || '').trim().toUpperCase());
       if (!room) return error(res, 404, '房间码不存在');
+      if (room.mode && room.mode !== 'online') return error(res, 400, '这个房间不能通过联机模式加入');
       const role = room.players.killer ? 'detective' : 'killer';
       const session = token();
       joinGame(room, role, session);
@@ -128,7 +144,11 @@ const server = http.createServer(async (req, res) => {
       if (!identity) return error(res, 401, '身份已失效');
       const input = await body(req);
       const draft = structuredClone(identity.room);
+      if (draft.mode === 'single' && identity.role !== draft.ai?.humanRole) return error(res, 403, '不能代替电脑执行行动');
+      const pending = input.type === 'answer' ? structuredClone(draft.pending) : null;
       act(draft, identity.role, input.type, input.payload || {});
+      rememberHumanAnswer(draft, pending, input.payload?.answer);
+      advanceAI(draft);
       rooms.set(draft.code, draft);
       save(); notify(draft.code);
       return json(res, 200, viewFor(draft, identity.role));

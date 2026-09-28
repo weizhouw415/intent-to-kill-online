@@ -85,7 +85,7 @@ async function action(type, payload = {}) {
 function connect() {
   stream?.close();
   if (!session) return;
-  if (session.mode === 'local') { stream = null; refresh(); return; }
+  if (session.mode === 'local' || session.mode === 'single') { stream = null; refresh(); return; }
   stream = new EventSource(`/api/events?token=${encodeURIComponent(session.token)}`);
   stream.addEventListener('update', refresh);
   stream.onerror = () => { /* EventSource reconnects automatically. */ };
@@ -138,17 +138,21 @@ function renderLobby() {
       <div class="lobby-top"><span class="eyebrow">1960s · Crime dossier</span><span class="paperclip">⌁</span></div>
       <div class="lobby-main">
         <section class="lobby-copy">
-          <p class="case-no">CASE FILE 006 / 双人对战</p>
+          <p class="case-no">CASE FILE 006 / 单人或双人对战</p>
           <h1>暗藏<br><span>杀机</span></h1>
           <p class="en-title">INTENT TO KILL</p>
           <p class="lead">这座城里，每个人都有嫌疑。</p>
           <p class="sublead">一人制造案件、隐藏身份与动机；一人追踪证词、监视嫌疑人。五起命案之后，真相只允许一个答案。</p>
-          <div class="rule-badges"><span>同机或联网</span><span>逻辑模式</span><span>约 45 分钟</span></div>
+          <div class="rule-badges"><span>单人、同机或联网</span><span>逻辑模式</span><span>约 45 分钟</span></div>
           <div class="lobby-form">
-            <div class="mode-heading"><span class="mode-number">01</span><div><b>同一台电脑</b><small>两人轮流操作，交接时自动遮挡棋盘</small></div></div>
+            <div class="mode-heading"><span class="mode-number single-number">01</span><div><b>单人挑战电脑</b><small>选择你的身份，电脑自动扮演另一方</small></div></div>
+            <div class="role-row"><label><input type="radio" name="single-role" value="detective" checked><span>我扮演侦探</span></label><label><input type="radio" name="single-role" value="killer"><span>我扮演凶手</span></label></div>
+            <button class="primary single-start" data-ui="create-single">开始单人对局 <b>→</b></button>
+            <div class="mode-divider"></div>
+            <div class="mode-heading"><span class="mode-number">02</span><div><b>同一台电脑</b><small>两人轮流操作，交接时自动遮挡棋盘</small></div></div>
             <button class="primary local-start" data-ui="create-local">开始同机双人对战 <b>→</b></button>
             <div class="mode-divider"></div>
-            <div class="mode-heading"><span class="mode-number">02</span><div><b>两台电脑联机</b><small>创建房间后，将链接或房间码发给对方</small></div></div>
+            <div class="mode-heading"><span class="mode-number">03</span><div><b>两台电脑联机</b><small>创建房间后，将链接或房间码发给对方</small></div></div>
             <div class="role-row"><label><input type="radio" name="role" value="killer" checked><span>我扮演凶手</span></label><label><input type="radio" name="role" value="detective"><span>我扮演侦探</span></label></div>
             <button class="primary" data-ui="create">创建房间 <b>↗</b></button>
             <div class="or-line"><span>或者用房间码加入</span></div>
@@ -256,16 +260,17 @@ function renderGame() {
   const myTurn = state.role === turnOwner(state) || state.phase === 'finished';
   const invite = `${inviteOrigin}/?room=${encodeURIComponent(state.code)}`;
   const local = session?.mode === 'local';
+  const single = session?.mode === 'single';
   app.innerHTML = `<div class="game-shell">
-    <header class="game-header"><div class="brand"><span class="brand-mark">◆</span><div><strong>暗藏杀机</strong><small>INTENT TO KILL</small></div></div><div class="header-middle"><span class="case-label">CASE № ${state.code}</span><span class="phase-pill ${myTurn ? 'my-turn' : ''}">${phaseLabel()}</span><span class="round-label">第 ${state.round} 回合</span></div><div class="header-right"><span class="role-badge ${state.role}">我的身份 · ${roleName(state.role)}</span>${local ? '<button class="icon-button" data-ui="cover" title="遮挡棋盘">▦ 遮挡屏幕</button>' : '<button class="icon-button" data-ui="copy" title="复制邀请链接">⌁ 分享</button>'}</div></header>
-    <div class="room-strip"><span>${local ? '同机双人 · 轮流操作' : `房间码 <b>${state.code}</b>`}</span><span>${state.players.killer ? '●' : '○'} 凶手 ${state.players.detective ? '●' : '○'} 侦探</span><span>已发生 <b>${state.victims.length} / 5</b> 起命案</span><button data-ui="leave">离开房间</button></div>
+    <header class="game-header"><div class="brand"><span class="brand-mark">◆</span><div><strong>暗藏杀机</strong><small>INTENT TO KILL</small></div></div><div class="header-middle"><span class="case-label">CASE № ${state.code}</span><span class="phase-pill ${myTurn ? 'my-turn' : ''}">${phaseLabel()}</span><span class="round-label">第 ${state.round} 回合</span></div><div class="header-right"><span class="role-badge ${state.role}">我的身份 · ${roleName(state.role)}</span>${local ? '<button class="icon-button" data-ui="cover" title="遮挡棋盘">▦ 遮挡屏幕</button>' : single ? '<span class="ai-badge">◉ 电脑对手</span>' : '<button class="icon-button" data-ui="copy" title="复制邀请链接">⌁ 分享</button>'}</div></header>
+    <div class="room-strip"><span>${local ? '同机双人 · 轮流操作' : single ? `单人模式 · 电脑扮演${roleName(session.computerRole)}` : `房间码 <b>${state.code}</b>`}</span><span>${state.players.killer ? '●' : '○'} 凶手 ${state.players.detective ? '●' : '○'} 侦探</span><span>已发生 <b>${state.victims.length} / 5</b> 起命案</span><button data-ui="leave">离开房间</button></div>
     <main class="game-main">${renderBoard()}<aside class="side-panel"><div class="side-tabs"><button data-ui="tab-actions" class="${panelTab === 'actions' ? 'active' : ''}">行动</button><button data-ui="tab-notes" class="${panelTab === 'notes' ? 'active' : ''}">笔记</button><button data-ui="tab-rules" class="${panelTab === 'rules' ? 'active' : ''}">规则</button></div><div class="side-content">
       ${panelTab === 'actions' ? `${selectedPanel()}<div class="panel-section"><div class="section-title">当前阶段 <span>${phaseLabel()}</span></div>${actionPanel()}${state.pending && state.role === 'killer' ? `<div class="answer-box"><span class="eyebrow">WITNESS QUESTION</span><b>${escapeHtml(person(state.pending.id)?.name)}被问：${escapeHtml(state.questions[state.pending.questionIndex])}</b><p>${state.pending.mayLie ? '这名证人可以说谎。' : '这名证人必须说实话。'}真实答案为“${state.pending.truthful ? '是' : '否'}”。</p><div class="answer-row">${actionButton('回答：是', 'answer', { answer:true }, 'secondary', !state.pending.mayLie && !state.pending.truthful)}${actionButton('回答：否', 'answer', { answer:false }, 'secondary', !state.pending.mayLie && state.pending.truthful)}</div></div>` : ''}</div>${secretPanel()}` : ''}
       ${panelTab === 'notes' ? `<div class="notes-panel"><span class="eyebrow">PRIVATE NOTEBOOK</span><h3>调查笔记</h3><p>${local ? '仅当前角色可在游戏界面看到自己的笔记。' : '仅保存在当前浏览器，不会共享给对手。'}</p><textarea id="notes" placeholder="记录嫌疑人、证词、动机推断……">${escapeHtml(localStorage.getItem(noteKey()) || '')}</textarea><div class="notes-footer">自动保存</div></div><div class="motive-list"><h4>可能动机</h4>${state.motives.map(m => `<div><b>${m.name}</b><span>${m.rule}</span></div>`).join('')}</div></div>` : ''}
       ${panelTab === 'rules' ? `<div class="rules-panel"><span class="eyebrow">QUICK REFERENCE</span><h3>双人逻辑模式</h3><ol><li>凶手每回合恐吓两名市民，然后按秘密动机谋杀一人。整局可放弃谋杀一次。</li><li>侦探抵达新案发街区，疏散其他市民；随后有 2 移动点和 2 种不同的调查行动。</li><li>讯问时，每名证人回答一个关于凶手外貌的是非题。凶手本人、相关人及支持者可说谎。</li><li>警局可放置监视标记。查看监视结果不消耗行动，可确认此刻能否谋杀目标。</li><li>城市阶段，双方依次按抽取的群体移动市民；现场不能进入，每街区最多三人。</li><li>第五起命案的回合结束后，侦探需同时猜中凶手身份与动机。</li></ol><a href="https://hobbyworldint.com/portfolio-item/intent-to-kill/" target="_blank" rel="noopener">查看发行方规则 ↗</a></div></div>` : ''}
     </div></aside></main>
     <section class="bottom-area"><div class="victim-row"><div class="bottom-title"><span class="eyebrow">VICTIM FILES</span><b>命案卷宗</b></div>${Array.from({length:5},(_,i) => { const v=state.victims[i]; const c=v && person(v.id); return `<div class="victim-slot ${v ? 'filled' : ''}"><span>${String(i+1).padStart(2,'0')}</span>${c ? `<b>${escapeHtml(c.name)}</b><small>${escapeHtml(state.blockNames[c.block])}</small>` : '<em>待发现</em>'}</div>`; }).join('')}</div><div class="case-log"><div class="bottom-title"><span class="eyebrow">CASE LOG</span><b>行动记录</b></div><div class="log-scroll">${state.log.slice(0,6).map(entry => `<p><span>${String(entry.round).padStart(2,'0')}</span>${escapeHtml(entry.text)}</p>`).join('')}</div></div></section>
-    <div class="game-footer"><span>本项目使用原创界面与人物图形 · 玩法参照《Intent to Kill》双人逻辑模式</span><span>${local ? '同机对战 · 换人时会自动遮挡屏幕' : `房间邀请：<code>${escapeHtml(invite)}</code>`}</span></div>
+    <div class="game-footer"><span>本项目使用原创界面与人物图形 · 玩法参照《Intent to Kill》双人逻辑模式</span><span>${local ? '同机对战 · 换人时会自动遮挡屏幕' : single ? `单人挑战 · 电脑是${roleName(session.computerRole)}` : `房间邀请：<code>${escapeHtml(invite)}</code>`}</span></div>
   </div>`;
 }
 function render() { if (handoff) renderHandoff(); else if (!state) renderLobby(); else renderGame(); }
@@ -298,6 +303,10 @@ app.addEventListener('click', async event => {
   const block = event.target.closest('[data-block]');
   if (ui) {
     switch (ui.dataset.ui) {
+      case 'create-single': {
+        try { const role = document.querySelector('input[name="single-role"]:checked').value; setSession(await request('/api/single', { method:'POST', body:JSON.stringify({role}) })); }
+        catch (e) { toast(e.message, true); } break;
+      }
       case 'create-local': {
         try { setSession(await request('/api/local', { method:'POST', body:'{}' })); }
         catch (e) { toast(e.message, true); } break;
@@ -353,4 +362,4 @@ app.addEventListener('input', event => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && session) refresh(); });
 render();
 request('/api/config').then(config => { inviteOrigin = config.publicUrl || location.origin; if (state) render(); }).catch(() => {});
-if (session && session.mode !== 'local') connect();
+if (session) connect();
