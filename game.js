@@ -69,6 +69,22 @@ function fail(message) { throw Object.assign(new Error(message), { status: 400 }
 function assert(condition, message) { if (!condition) fail(message); }
 function randomItem(items) { return shuffle(items)[0]; }
 function log(game, text) { game.log.unshift({ round: game.round, text, at: Date.now() }); game.log = game.log.slice(0, 90); }
+const ACTION_LABELS = {
+  choose_support: '完成秘密设定', choose_start: '选择侦探起点', intimidate: '恐吓市民', skip_intimidation: '跳过恐吓',
+  murder: '实施谋杀', skip_murder: '放弃谋杀', evacuate: '疏散现场', move_detective: '移动侦探',
+  question: '讯问市民', diner: '餐馆讯问', answer: '回答讯问', surveil_place: '布置监视', surveil_check: '查看监视报告',
+  comfort: '医院安抚', fire: '启动消防局行动', fire_choose_group: '选择消防局移动群体', fire_move: '消防局移动市民',
+  fire_done: '结束消防局移动', end_detective: '结束调查', city_choose_group: '选择城市移动群体', city_move: '城市阶段移动市民',
+  city_done: '完成城市行动', next_round: '进入下一回合', accuse: '提交最终指认',
+};
+function recordAction(game, role, type, previousLog) {
+  const previousIndex = game.log.indexOf(previousLog);
+  const directEntry = previousIndex > 0 ? game.log[previousIndex - 1] : null;
+  const text = directEntry?.text || `${role === 'killer' ? '凶手' : '侦探'}${ACTION_LABELS[type] || '完成行动'}。`;
+  game.actionLog ||= [];
+  game.actionLog.unshift({ round: game.round, role, type, label: ACTION_LABELS[type] || type, text, at: Date.now() });
+  game.actionLog = game.actionLog.slice(0, 200);
+}
 function otherRole(role) { return role === 'killer' ? 'detective' : 'killer'; }
 function winner(game, role, why) {
   game.phase = 'finished'; game.winner = role; game.endReason = why;
@@ -81,7 +97,7 @@ export function createGame(code, firstRole, firstToken) {
     actions: [], moves: 2, questionBlock: null, questionClosed: false, questioned: [], pending: null,
     surveillance: null, groupPool: [], heldGroups: [], moveGroup: null, moveRemaining: [], chooseCityGroup: false,
     fireGroup: null, fireRemaining: [], firePick: false,
-    secret: null, supporterOptions: [], winner: null, endReason: '', log: [] };
+    secret: null, supporterOptions: [], winner: null, endReason: '', log: [], actionLog: [] };
 }
 
 export function joinGame(game, role, token) {
@@ -177,6 +193,7 @@ function prepareQuestion(game, id, questionIndex, source) {
 
 export function act(game, role, type, payload = {}) {
   const id = Number(payload.id), block = Number(payload.block), questionIndex = Number(payload.question);
+  const previousLog = game.log[0];
   if (game.phase === 'finished') fail('对局已经结束');
   switch (type) {
     case 'choose_support': {
@@ -368,6 +385,7 @@ export function act(game, role, type, payload = {}) {
     }
     default: fail('未知操作');
   }
+  recordAction(game, role, type, previousLog);
   return game;
 }
 
@@ -390,7 +408,7 @@ export function viewFor(game, role) {
     surveillance: game.surveillance, moveGroup: game.moveGroup, moveRemaining: game.moveRemaining,
     fireGroup: game.fireGroup || null, fireRemaining: game.fireRemaining || [], firePick: game.firePick || false,
     chooseCityGroup: game.chooseCityGroup || false,
-    winner: game.winner, endReason: game.endReason, accusation: game.accusation || null, log: game.log,
+    winner: game.winner, endReason: game.endReason, accusation: game.accusation || null, log: game.log, actionLog: game.actionLog || [],
     buildings: BUILDINGS, blockNames: BLOCK_NAMES, groups: GROUPS, motives: MOTIVES, questions: QUESTIONS.map(q => q[2]),
   };
   if (game.pending) out.pending = role === 'killer' ? game.pending : { id: game.pending.id, questionIndex: game.pending.questionIndex, source: game.pending.source };

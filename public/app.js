@@ -29,6 +29,7 @@ const activeRole = phase => ['setup_support','killer_intimidate','killer_murder'
 const noteKey = () => `itk-notes-${state.code}-${state.role}`;
 const canSelect = id => !!person(id) && !person(id).dead;
 const adjacent = (a,b) => Math.abs(Math.floor(a/4)-Math.floor(b/4)) + Math.abs(a%4-b%4) === 1;
+const canMoveCivilianTo = (c, block) => !!c && adjacent(c.block, block) && !state.scenes.some(s => s.block === block) && grouped(block).length < 3;
 
 function toast(message, isError = false) {
   toastEl.textContent = message;
@@ -122,11 +123,24 @@ function portrait(c, large = false) {
     <rect width="100" height="120" fill="url(#grain${c.id})"/>
   </svg>`;
 }
+function movementContext() {
+  if (!state || state.role !== activeRole(state.phase)) return null;
+  if (['city_killer', 'city_detective'].includes(state.phase) && !state.chooseCityGroup && state.moveGroup) {
+    return { kind:'city', group:state.moveGroup, ids:state.moveRemaining || [] };
+  }
+  if (state.phase === 'detective' && state.fireGroup) {
+    return { kind:'fire', group:state.fireGroup, ids:state.fireRemaining || [] };
+  }
+  return null;
+}
 function card(c, opts = {}) {
   const selected = selectedId === c.id;
   const watched = state.surveillance === c.id;
-  return `<button class="person-card ${c.intimidated ? 'intimidated' : ''} ${selected ? 'selected' : ''}" style="--person-color:${palette[groupPalette[c.group]]}" data-person="${c.id}" aria-label="${escapeHtml(c.name)}，${escapeHtml(c.group)}">
-    <div class="person-art">${portrait(c)}${c.intimidated ? '<span class="intimidated-mark">恐吓</span>' : ''}${watched ? '<span class="watch-mark">◎</span>' : ''}</div>
+  const movement = movementContext();
+  const movable = movement?.ids.includes(c.id);
+  const dimmed = movement && !movable;
+  return `<button class="person-card ${c.intimidated ? 'intimidated' : ''} ${selected ? 'selected' : ''} ${movable ? 'movable' : ''} ${dimmed ? 'movement-muted' : ''}" style="--person-color:${palette[groupPalette[c.group]]}" data-person="${c.id}" aria-label="${escapeHtml(c.name)}，${escapeHtml(c.group)}${movable ? '，可移动' : ''}">
+    <div class="person-art">${portrait(c)}${c.intimidated ? '<span class="intimidated-mark">恐吓</span>' : ''}${watched ? '<span class="watch-mark">◎</span>' : ''}${movable ? '<span class="move-mark">可移动</span>' : ''}</div>
     <div class="person-name">${escapeHtml(c.name)}</div>
     <div class="person-meta">${escapeHtml(c.sex)} · ${escapeHtml(c.age)}</div>
   </button>`;
@@ -196,6 +210,7 @@ function renderHandoff() {
   </section></main>`;
 }
 function renderBoard() {
+  const movement = movementContext();
   const blocks = Array.from({ length: 16 }, (_, i) => {
     const building = state.buildings[i];
     const scene = state.scenes.find(s => s.block === i);
@@ -203,7 +218,8 @@ function renderBoard() {
     const detective = state.detectiveBlock === i;
     let hint = '';
     if (mode === 'move' && state.phase === 'detective' && adjacent(state.detectiveBlock, i)) hint = 'target';
-    if (mode === 'destination' && selectedId !== null && adjacent(person(selectedId)?.block, i)) hint = 'target';
+    const movingPerson = person(selectedId);
+    if (mode === 'destination' && movement?.ids.includes(movingPerson?.id) && canMoveCivilianTo(movingPerson, i)) hint = 'target';
     if (state.phase === 'setup_detective' && state.role === 'detective') hint = 'target';
     return `<div class="block ${scene ? 'crime-block' : ''} ${detective ? 'detective-block' : ''} ${hint}" data-block="${i}">
       <div class="block-top"><span class="block-number">${String(i+1).padStart(2,'0')}</span><span class="block-title">${escapeHtml(state.blockNames[i])}</span></div>
@@ -211,24 +227,32 @@ function renderBoard() {
       <div class="block-people">${people.map(c => card(c)).join('') || '<div class="empty-street">···</div>'}</div>
     </div>`;
   }).join('');
-  return `<section class="board-wrap"><div class="board-heading"><div><span class="eyebrow">CITY MAP / 01—16</span><h2>城市地图</h2></div><p>点击人物查看档案；需要移动时，先选人物，再点目标街区。</p></div><div class="board">${blocks}</div></section>`;
+  return `<section class="board-wrap"><div class="board-heading"><div><span class="eyebrow">CITY MAP / 01—16</span><h2>城市地图</h2></div>${movement ? `<div class="board-movement-notice" style="--group-color:${palette[groupPalette[movement.group]]}"><span>当前移动社群</span><b>${escapeHtml(movement.group)}</b><small>${movement.ids.length ? `${movement.ids.length} 人待移动 · 选择发光人物` : '该社群移动已完成'}</small></div>` : '<p>点击人物查看档案；需要移动时，先选人物，再点目标街区。</p>'}</div><div class="board ${movement ? 'movement-active' : ''}">${blocks}</div></section>`;
 }
 function selectedPanel() {
   const c = person(selectedId);
   if (!c) return `<div class="empty-selection"><div class="fingerprint">◎</div><h3>选择一位市民</h3><p>点击地图上的人物牌，查看其身份特征与可用行动。</p></div>`;
-  return `<div class="selected-person"><div class="selected-portrait" style="--person-color:${palette[groupPalette[c.group]]}">${portrait(c, true)}</div><div class="selected-data"><span class="eyebrow">CIVILIAN / ${String(c.id+1).padStart(2,'0')}</span><h3>${escapeHtml(c.name)}</h3><p class="group-name">${escapeHtml(c.group)} · ${escapeHtml(state.blockNames[c.block])}</p><div class="traits"><span>性别 <b>${c.sex}</b></span><span>年龄 <b>${c.age}</b></span><span>体型 <b>${c.build}</b></span><span>身高 <b>${c.height}</b></span></div>${c.intimidated ? '<div class="person-alert">此人受恐吓，无法接受讯问</div>' : ''}</div></div>`;
+  return `<div class="selected-person"><div class="selected-portrait" style="--person-color:${palette[groupPalette[c.group]]}">${portrait(c, true)}</div><div class="selected-data"><span class="eyebrow">CIVILIAN / ${String(c.id+1).padStart(2,'0')}</span><h3>${escapeHtml(c.name)}</h3><p class="group-name">${escapeHtml(c.group)} · ${escapeHtml(state.blockNames[c.block])}</p><div class="traits"><span>性别 <b>${c.sex}</b></span><span>年龄 <b>${c.age}</b></span><span>体型 <b>${c.build}</b></span><span>身高 <b>${c.height}</b></span></div>${c.dead ? '<div class="person-alert deceased">† 已遇害 · 档案仅供查阅</div>' : c.intimidated ? '<div class="person-alert">此人受恐吓，无法接受讯问</div>' : ''}</div></div>`;
 }
 function questionSelect() { return `<select id="question-select">${state.questions.map((q,i) => `<option value="${i}" ${question === i ? 'selected' : ''}>${escapeHtml(q)}</option>`).join('')}</select>`; }
 function actionButton(text, type, payload = {}, cls = 'secondary', disabled = false) {
   return `<button class="${cls}" data-action="${type}" data-payload="${escapeHtml(JSON.stringify(payload))}" ${disabled ? 'disabled' : ''}>${text}</button>`;
 }
+function groupChoiceButton(group, type) {
+  return `<button class="choice group-choice" style="--group-color:${palette[groupPalette[group]]}" data-action="${type}" data-payload="${escapeHtml(JSON.stringify({ group }))}"><span class="group-swatch"></span>${escapeHtml(group)}</button>`;
+}
+function movementGuide(context) {
+  const members = context.ids.map(person).filter(Boolean);
+  return `<div class="movement-guide" style="--group-color:${palette[groupPalette[context.group]]}"><div class="movement-group"><span>${context.kind === 'fire' ? '消防局指定社群' : '本阶段移动社群'}</span><b>${escapeHtml(context.group)}</b><em>${members.length} 人待移动</em></div><p>先选择地图上带“可移动”标记的人物，再点击发光的相邻街区。</p>${members.length ? `<div class="movable-roster">${members.map(c => `<button data-person="${c.id}" class="${selectedId === c.id ? 'active' : ''}"><b>${escapeHtml(c.name)}</b><span>${escapeHtml(state.blockNames[c.block])}</span></button>`).join('')}</div>` : '<div class="movement-complete">✓ 该社群人员已处理完毕</div>'}</div>`;
+}
 function actionPanel() {
   const c = person(selectedId);
   const mine = state.role === activeRole(state.phase);
+  if (c?.dead) return `<div class="instruction waiting"><b>死者档案</b><p>该市民已遇害，不能再执行调查或移动行动。其完整身份特征保留在上方档案中。</p></div>`;
   if (state.phase === 'waiting') return `<div class="instruction"><b>等待另一位玩家</b><p>把房间码或邀请链接发给对方。对方加入后自动开始。</p></div>`;
   if (state.phase === 'setup_support') {
     if (!mine) return waitingPanel('凶手正在秘密设定案件');
-    return `<div class="instruction"><b>选择支持者群体</b><p>你抽到了三个群体标记，只能保留一个。其成员在讯问时可以说谎。</p></div><div class="choice-grid">${state.supporterOptions.map(g => actionButton(g, 'choose_support', { group:g }, 'choice')).join('')}</div>`;
+    return `<div class="instruction"><b>选择支持者群体</b><p>你抽到了三个群体标记，只能保留一个。其成员在讯问时可以说谎。</p></div><div class="choice-grid">${state.supporterOptions.map(g => groupChoiceButton(g, 'choose_support')).join('')}</div>`;
   }
   if (state.phase === 'setup_detective') return mine ? `<div class="instruction"><b>选择起点</b><p>点击地图上的任一街区，放置侦探标记。</p></div>` : waitingPanel('侦探正在选择起点');
   if (state.phase === 'killer_intimidate') return mine ? `<div class="instruction"><b>恐吓两名市民</b><p>选择侦探不在同一街区的市民。已恐吓 ${state.intimidations} / 2。</p></div>${c ? actionButton('恐吓这名市民', 'intimidate', { id:c.id }, 'primary wide', c.intimidated || c.block === state.detectiveBlock) : ''}` : waitingPanel('凶手正在恐吓市民');
@@ -252,12 +276,12 @@ function actionPanel() {
         ${state.surveillance !== null ? actionButton(`查看监视结果：${escapeHtml(person(state.surveillance)?.name)}`, 'surveil_check', {}, 'accent wide') : ''}
         ${building === '医院' && c && near ? actionButton(`医院：安抚 ${escapeHtml(c.name)}`, 'comfort', { id:c.id }, 'secondary wide', !c.intimidated || used('hospital') || noAction) : ''}
         ${building === '消防局' ? actionButton('消防局：抽群体移动', 'fire', {}, 'secondary wide', used('fire') || noAction) : ''}
-        ${state.firePick ? `<div class="instruction"><b>消防局：自选群体</b><p>抽到的群体已不在城中，请选择一个在场群体。</p></div><div class="choice-grid">${state.groups.filter(g => state.civilians.some(c => !c.dead && c.group === g)).map(g => actionButton(g, 'fire_choose_group', {group:g}, 'choice')).join('')}</div>` : ''}
-        ${state.fireGroup ? `<div class="instruction"><b>消防局：${state.fireGroup}</b><p>选择该群体市民后，点击相邻街区移动。可随时结束。</p></div>${actionButton('结束消防局移动', 'fire_done', {}, 'text-button wide')}` : ''}
+        ${state.firePick ? `<div class="instruction"><b>消防局：自选群体</b><p>抽到的群体已不在城中，请选择一个在场群体。</p></div><div class="choice-grid">${state.groups.filter(g => state.civilians.some(c => !c.dead && c.group === g)).map(g => groupChoiceButton(g, 'fire_choose_group')).join('')}</div>` : ''}
+        ${state.fireGroup ? `${movementGuide({ kind:'fire', group:state.fireGroup, ids:state.fireRemaining || [] })}${actionButton('结束消防局移动', 'fire_done', {}, 'text-button wide')}` : ''}
         ${actionButton('结束调查，进入城市阶段', 'end_detective', {}, 'primary wide')}
       </div>`}`;
   }
-  if (state.phase === 'city_killer' || state.phase === 'city_detective') return mine ? `<div class="instruction"><b>${state.chooseCityGroup ? '自选在场群体' : `${state.moveGroup || '无'}群体移动`}</b><p>${state.chooseCityGroup ? '抽到的群体已离城，选择另一个在场群体。' : `可将该群体市民各移动一次到相邻街区。剩余 ${state.moveRemaining.length} 人；不想移动可直接结束。`}</p></div>${state.chooseCityGroup ? `<div class="choice-grid">${state.groups.filter(g => state.civilians.some(c => !c.dead && c.group === g)).map(g => actionButton(g, 'city_choose_group', {group:g}, 'choice')).join('')}</div>` : ''}${c && state.moveRemaining.includes(c.id) ? '<div class="hint-chip">已选择市民 · 点击相邻街区移动</div>' : ''}${actionButton('完成我的城市行动', 'city_done', {}, 'primary wide')}` : waitingPanel(`${otherRole(state.role)}正在移动市民`);
+  if (state.phase === 'city_killer' || state.phase === 'city_detective') return mine ? `${state.chooseCityGroup ? `<div class="instruction"><b>自选在场群体</b><p>抽到的群体已离城，请选择另一个在场群体。</p></div><div class="choice-grid">${state.groups.filter(g => state.civilians.some(c => !c.dead && c.group === g)).map(g => groupChoiceButton(g, 'city_choose_group')).join('')}</div>` : state.moveGroup ? movementGuide({ kind:'city', group:state.moveGroup, ids:state.moveRemaining || [] }) : '<div class="instruction waiting"><b>没有可移动社群</b><p>社群标记已用完，可以直接完成城市行动。</p></div>'}${c && state.moveRemaining.includes(c.id) ? '<div class="hint-chip move-selected">✓ 已选中人物 · 地图上发光街区均可到达</div>' : ''}${actionButton('完成我的城市行动', 'city_done', {}, 'primary wide')}` : waitingPanel(`${otherRole(state.role)}正在移动市民`);
   if (state.phase === 'round_end') {
     if (!mine) return waitingPanel('侦探正在整理结论');
     const canAccuse = state.victims.length >= 3;
@@ -274,6 +298,10 @@ function secretPanel() {
   const killer = person(state.secret.killerId), interest = person(state.secret.interestId), motive = state.motives.find(m => m.id === state.secret.motive);
   return `<details class="secret-panel"><summary>🔒 我的秘密档案 <span>仅凶手可见</span></summary><div><p><b>凶手身份</b><strong>${escapeHtml(killer?.name)}</strong></p><p><b>相关人</b><strong>${escapeHtml(interest?.name)}</strong></p><p><b>动机</b><strong>${escapeHtml(motive?.name)}</strong></p><p class="secret-rule">${escapeHtml(motive?.rule)}</p><p><b>支持者</b><strong>${escapeHtml(state.secret.supporter || '待选择')}</strong></p></div></details>`;
 }
+function activityPanel() {
+  const entries = state.actionLog || [];
+  return `<div class="activity-panel"><span class="eyebrow">ACTION HISTORY</span><h3>行动记录</h3><p class="activity-intro">按时间记录侦探与凶手执行的全部行动。</p>${entries.length ? `<div class="activity-list">${entries.map(entry => `<article class="activity-entry ${entry.role}"><div class="activity-meta"><span class="activity-role">${roleName(entry.role)}</span><span>第 ${entry.round} 回合</span><time>${new Date(entry.at).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' })}</time></div><b>${escapeHtml(entry.label)}</b><p>${escapeHtml(entry.text)}</p></article>`).join('')}</div>` : '<div class="activity-empty"><span>◎</span><b>暂无行动</b><p>双方执行行动后会自动记录在这里。</p></div>'}</div>`;
+}
 function renderGame() {
   const myTurn = state.role === turnOwner(state) || state.phase === 'finished';
   const invite = `${inviteOrigin}/?room=${encodeURIComponent(state.code)}`;
@@ -282,12 +310,13 @@ function renderGame() {
   app.innerHTML = `<div class="game-shell">
     <header class="game-header"><div class="brand"><span class="brand-mark">◆</span><div><strong>暗藏杀机</strong><small>INTENT TO KILL</small></div></div><div class="header-middle"><span class="case-label">CASE № ${state.code}</span><span class="phase-pill ${myTurn ? 'my-turn' : ''}">${phaseLabel()}</span><span class="round-label">第 ${state.round} 回合</span></div><div class="header-right"><span class="role-badge ${state.role}">我的身份 · ${roleName(state.role)}</span>${local ? '<button class="icon-button" data-ui="cover" title="遮挡棋盘">▦ 遮挡屏幕</button>' : single ? '<span class="ai-badge">◉ 电脑对手</span>' : '<button class="icon-button" data-ui="copy" title="复制邀请链接">⌁ 分享</button>'}</div></header>
     <div class="room-strip"><span>${local ? '同机双人 · 轮流操作' : single ? `单人模式 · 电脑扮演${roleName(session.computerRole)}` : `房间码 <b>${state.code}</b>`}</span><span>${state.players.killer ? '●' : '○'} 凶手 ${state.players.detective ? '●' : '○'} 侦探</span><span>已发生 <b>${state.victims.length} / 5</b> 起命案</span><button data-ui="leave">离开房间</button></div>
-    <main class="game-main">${renderBoard()}<aside class="side-panel"><div class="side-tabs"><button data-ui="tab-actions" class="${panelTab === 'actions' ? 'active' : ''}">行动</button><button data-ui="tab-notes" class="${panelTab === 'notes' ? 'active' : ''}">笔记</button><button data-ui="tab-rules" class="${panelTab === 'rules' ? 'active' : ''}">规则</button></div><div class="side-content">
+    <main class="game-main">${renderBoard()}<aside class="side-panel"><div class="side-tabs"><button data-ui="tab-actions" class="${panelTab === 'actions' ? 'active' : ''}">行动</button><button data-ui="tab-history" class="${panelTab === 'history' ? 'active' : ''}">记录</button><button data-ui="tab-notes" class="${panelTab === 'notes' ? 'active' : ''}">笔记</button><button data-ui="tab-rules" class="${panelTab === 'rules' ? 'active' : ''}">规则</button></div><div class="side-content">
       ${panelTab === 'actions' ? `${selectedPanel()}<div class="panel-section"><div class="section-title">当前阶段 <span>${phaseLabel()}</span></div>${actionPanel()}${state.pending && state.role === 'killer' ? `<div class="answer-box"><span class="eyebrow">WITNESS QUESTION</span><b>${escapeHtml(person(state.pending.id)?.name)}被问：${escapeHtml(state.questions[state.pending.questionIndex])}</b><p>${state.pending.mayLie ? '这名证人可以说谎。' : '这名证人必须说实话。'}真实答案为“${state.pending.truthful ? '是' : '否'}”。</p><div class="answer-row">${actionButton('回答：是', 'answer', { answer:true }, 'secondary', !state.pending.mayLie && !state.pending.truthful)}${actionButton('回答：否', 'answer', { answer:false }, 'secondary', !state.pending.mayLie && state.pending.truthful)}</div></div>` : ''}</div>${secretPanel()}` : ''}
+      ${panelTab === 'history' ? activityPanel() : ''}
       ${panelTab === 'notes' ? `<div class="notes-panel"><span class="eyebrow">PRIVATE NOTEBOOK</span><h3>调查笔记</h3><p>${local ? '仅当前角色可在游戏界面看到自己的笔记。' : '仅保存在当前浏览器，不会共享给对手。'}</p><textarea id="notes" placeholder="记录嫌疑人、证词、动机推断……">${escapeHtml(localStorage.getItem(noteKey()) || '')}</textarea><div class="notes-footer">自动保存</div></div><div class="motive-list"><h4>可能动机</h4>${state.motives.map(m => `<div><b>${m.name}</b><span>${m.rule}</span></div>`).join('')}</div></div>` : ''}
       ${panelTab === 'rules' ? `<div class="rules-panel"><span class="eyebrow">QUICK REFERENCE</span><h3>双人逻辑模式</h3><ol><li>凶手每回合恐吓两名市民，然后按秘密动机谋杀一人。整局可放弃谋杀一次。</li><li>侦探抵达新案发街区，疏散其他市民；随后有 2 移动点和 2 种不同的调查行动。</li><li>讯问时，每名证人回答一个关于凶手外貌的是非题。凶手本人、相关人及支持者可说谎。</li><li>警局可放置监视标记。查看监视结果不消耗行动，可确认此刻能否谋杀目标。</li><li>城市阶段，双方依次按抽取的群体移动市民；现场不能进入，每街区最多三人。</li><li>第五起命案的回合结束后，侦探需同时猜中凶手身份与动机。</li></ol><a href="https://hobbyworldint.com/portfolio-item/intent-to-kill/" target="_blank" rel="noopener">查看发行方规则 ↗</a></div></div>` : ''}
     </div></aside></main>
-    <section class="bottom-area"><div class="victim-row"><div class="bottom-title"><span class="eyebrow">VICTIM FILES</span><b>命案卷宗</b></div>${Array.from({length:5},(_,i) => { const v=state.victims[i]; const c=v && person(v.id); return `<div class="victim-slot ${v ? 'filled' : ''}"><span>${String(i+1).padStart(2,'0')}</span>${c ? `<b>${escapeHtml(c.name)}</b><small>${escapeHtml(state.blockNames[c.block])}</small>` : '<em>待发现</em>'}</div>`; }).join('')}</div><div class="case-log"><div class="bottom-title"><span class="eyebrow">CASE LOG</span><b>行动记录</b></div><div class="log-scroll">${state.log.slice(0,6).map(entry => `<p><span>${String(entry.round).padStart(2,'0')}</span>${escapeHtml(entry.text)}</p>`).join('')}</div></div></section>
+    <section class="bottom-area"><div class="victim-row"><div class="bottom-title"><span class="eyebrow">VICTIM FILES</span><b>命案卷宗</b></div>${Array.from({length:5},(_,i) => { const v=state.victims[i]; const c=v && person(v.id); return c ? `<button class="victim-slot filled" data-victim="${c.id}" title="查看 ${escapeHtml(c.name)} 的完整档案"><span>${String(i+1).padStart(2,'0')} · 第 ${v.round} 回合</span><b>${escapeHtml(c.name)}</b><small>${escapeHtml(c.group)} · ${escapeHtml(c.sex)} · ${escapeHtml(c.age)}</small><small>${escapeHtml(c.build)} · ${escapeHtml(c.height)} · ${escapeHtml(state.blockNames[c.block])}</small></button>` : `<div class="victim-slot"><span>${String(i+1).padStart(2,'0')}</span><em>待发现</em></div>`; }).join('')}</div><div class="case-log"><div class="bottom-title"><span class="eyebrow">CASE LOG</span><b>案件日志</b></div><div class="log-scroll">${state.log.slice(0,6).map(entry => `<p><span>${String(entry.round).padStart(2,'0')}</span>${escapeHtml(entry.text)}</p>`).join('')}</div></div></section>
     <div class="game-footer"><span>本项目使用原创界面与人物图形 · 玩法参照《Intent to Kill》双人逻辑模式</span><span>${local ? '同机对战 · 换人时会自动遮挡屏幕' : single ? `单人挑战 · 电脑是${roleName(session.computerRole)}` : `房间邀请：<code>${escapeHtml(invite)}</code>`}</span></div>
   </div>`;
 }
@@ -311,13 +340,21 @@ async function handleBlock(block) {
   }
   if (selectedId === null) return;
   if (state.phase === 'evacuate' && state.role === 'detective') return action('evacuate', { id:selectedId, block });
-  if (state.phase === 'city_killer' && state.role === 'killer' || state.phase === 'city_detective' && state.role === 'detective') return action('city_move', { id:selectedId, block });
-  if (state.phase === 'detective' && state.role === 'detective' && state.fireRemaining.includes(selectedId)) return action('fire_move', { id:selectedId, block });
+  if (state.phase === 'city_killer' && state.role === 'killer' || state.phase === 'city_detective' && state.role === 'detective') {
+    if (!state.moveRemaining.includes(selectedId)) return toast('请先选择带“可移动”标记的人物', true);
+    if (!canMoveCivilianTo(person(selectedId), block)) return toast('请选择地图上发光的相邻街区', true);
+    mode = 'select'; const id = selectedId; selectedId = null; return action('city_move', { id, block });
+  }
+  if (state.phase === 'detective' && state.role === 'detective' && state.fireRemaining.includes(selectedId)) {
+    if (!canMoveCivilianTo(person(selectedId), block)) return toast('请选择地图上发光的相邻街区', true);
+    mode = 'select'; const id = selectedId; selectedId = null; return action('fire_move', { id, block });
+  }
 }
 app.addEventListener('click', async event => {
   const ui = event.target.closest('[data-ui]');
   const button = event.target.closest('[data-action]');
   const card = event.target.closest('[data-person]');
+  const victim = event.target.closest('[data-victim]');
   const block = event.target.closest('[data-block]');
   if (ui) {
     switch (ui.dataset.ui) {
@@ -363,13 +400,15 @@ app.addEventListener('click', async event => {
         break;
       }
       case 'tab-actions': panelTab = 'actions'; render(); break;
+      case 'tab-history': panelTab = 'history'; render(); break;
       case 'tab-notes': panelTab = 'notes'; render(); break;
       case 'tab-rules': panelTab = 'rules'; render(); break;
     }
     return;
   }
   if (button) return handleAction(button);
-  if (card) { selectedId = Number(card.dataset.person); mode = 'select'; render(); return; }
+  if (victim) { selectedId = Number(victim.dataset.victim); mode = 'select'; panelTab = 'actions'; render(); return; }
+  if (card) { selectedId = Number(card.dataset.person); mode = movementContext()?.ids.includes(selectedId) ? 'destination' : 'select'; panelTab = 'actions'; render(); return; }
   if (block) return handleBlock(Number(block.dataset.block));
 });
 app.addEventListener('change', event => {

@@ -93,3 +93,33 @@ test('a drawn group with no civilians lets the active player choose a present gr
   assert.equal(game.moveGroup, present);
   assert.ok(game.moveRemaining.length > 0);
 });
+test('every game action adds a structured role-aware action record', () => {
+  const game = createGame('LOG001', 'killer', 'killer-token');
+  joinGame(game, 'detective', 'detective-token');
+  assert.equal(game.actionLog.length, 0);
+
+  act(game, 'killer', 'choose_support', { group:game.supporterOptions[0] });
+  assert.deepEqual(
+    { role:game.actionLog[0].role, type:game.actionLog[0].type, label:game.actionLog[0].label },
+    { role:'killer', type:'choose_support', label:'完成秘密设定' },
+  );
+
+  act(game, 'detective', 'choose_start', { block:5 });
+  assert.equal(game.actionLog.length, 2);
+  assert.equal(game.actionLog[0].role, 'detective');
+  assert.equal(game.actionLog[0].type, 'choose_start');
+  assert.match(game.actionLog[0].text, /侦探从市政广场开始调查/);
+  assert.equal(viewFor(game, 'killer').actionLog.length, 2);
+  assert.equal(viewFor(game, 'detective').actionLog.length, 2);
+});
+test('action records prefer the action detail over automatic phase messages', () => {
+  const game = ready();
+  const available = () => game.civilians.find(c => !c.dead && !c.intimidated && c.block !== game.detectiveBlock);
+  act(game, 'killer', 'intimidate', { id:available().id });
+  act(game, 'killer', 'intimidate', { id:available().id });
+  const victim = game.civilians.find(c => canKill(game, c.id));
+  act(game, 'killer', 'murder', { id:victim.id });
+  assert.equal(game.actionLog[0].type, 'murder');
+  assert.match(game.actionLog[0].text, /命案发生/);
+  assert.doesNotMatch(game.actionLog[0].text, /须先疏散/);
+});
