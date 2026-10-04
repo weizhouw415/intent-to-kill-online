@@ -17,7 +17,6 @@
 
 /* Landing page: keep the complete launch panel inside the first viewport. */
 @media (min-width:1081px){
-  body{overflow:hidden}
   .lobby-shell{height:100svh;min-height:0;padding:16px 24px}
   .lobby-paper{height:calc(100svh - 32px);min-height:0;max-height:900px}
   .lobby-top{padding:18px 36px 0}
@@ -48,7 +47,6 @@
   .box-caption{font-size:10px;padding-top:7px}
 }
 @media (min-width:701px) and (max-width:1080px){
-  body{overflow:hidden}
   .lobby-shell{height:100svh;min-height:0;padding:12px}
   .lobby-paper{height:calc(100svh - 24px);min-height:0}
   .lobby-top{padding:14px 24px 0}
