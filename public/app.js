@@ -139,7 +139,8 @@ function card(c, opts = {}) {
   const movement = movementContext();
   const movable = movement?.ids.includes(c.id);
   const dimmed = movement && !movable;
-  return `<button class="person-card ${c.intimidated ? 'intimidated' : ''} ${selected ? 'selected' : ''} ${movable ? 'movable' : ''} ${dimmed ? 'movement-muted' : ''}" style="--person-color:${palette[groupPalette[c.group]]}" data-person="${c.id}" aria-label="${escapeHtml(c.name)}，${escapeHtml(c.group)}${movable ? '，可移动' : ''}">
+  return `<button class="person-card ${c.intimidated ? 'intimidated' : ''} ${selected ? 'selected' : ''} ${movable ? 'movable' : ''} ${dimmed ? 'movement-muted' : ''}" style="--person-color:${palette[groupPalette[c.group]]}" data-person="${c.id}" data-group="${escapeHtml(c.group)}" aria-label="${escapeHtml(c.name)}，${escapeHtml(c.group)}${movable ? '，可移动' : ''}">
+    <span class="person-group">${escapeHtml(c.group)}</span>
     <div class="person-art">${portrait(c)}${c.intimidated ? '<span class="intimidated-mark">恐吓</span>' : ''}${watched ? '<span class="watch-mark">◎</span>' : ''}${movable ? '<span class="move-mark">可移动</span>' : ''}</div>
     <div class="person-name">${escapeHtml(c.name)}</div>
     <div class="person-meta">${escapeHtml(c.sex)} · ${escapeHtml(c.age)}</div>
@@ -192,7 +193,7 @@ function renderLobby() {
           </div>
           <p class="credit">依据 Arthur Khodzhikov 桌游的双人逻辑模式制作 · 人物插画为本项目原创</p>
         </section>
-        <aside class="box-aside"><div class="box-image"><img src="/assets/box-photo.jpg" alt="用户提供的《暗藏杀机》桌游盒面照片"></div><div class="box-caption">玩家提供的盒面照片 <span>↗</span></div></aside>
+        <aside class="box-aside"><div class="box-image"><img src="/assets/box-photo.webp" alt="用户提供的《暗藏杀机》桌游盒面照片"></div><div class="box-caption">玩家提供的盒面照片 <span>↗</span></div></aside>
       </div>
     </div>
   </main>`;
@@ -239,7 +240,7 @@ function actionButton(text, type, payload = {}, cls = 'secondary', disabled = fa
   return `<button class="${cls}" data-action="${type}" data-payload="${escapeHtml(JSON.stringify(payload))}" ${disabled ? 'disabled' : ''}>${text}</button>`;
 }
 function groupChoiceButton(group, type) {
-  return `<button class="choice group-choice" style="--group-color:${palette[groupPalette[group]]}" data-action="${type}" data-payload="${escapeHtml(JSON.stringify({ group }))}"><span class="group-swatch"></span>${escapeHtml(group)}</button>`;
+  return `<button class="choice group-choice" style="--group-color:${palette[groupPalette[group]]};--group-ink:${group === '政府' ? '#222831' : '#fff'}" data-group-choice="${escapeHtml(group)}" data-action="${type}" data-payload="${escapeHtml(JSON.stringify({ group }))}">${escapeHtml(group)}</button>`;
 }
 function movementGuide(context) {
   const members = context.ids.map(person).filter(Boolean);
@@ -321,6 +322,15 @@ function renderGame() {
   </div>`;
 }
 function render() { if (handoff) renderHandoff(); else if (!state) renderLobby(); else renderGame(); }
+
+function previewGroup(group) {
+  const board = app.querySelector('.board');
+  if (!board) return;
+  board.classList.toggle('group-previewing', !!group);
+  board.querySelectorAll('.person-card').forEach(card => {
+    card.classList.toggle('group-preview-match', !!group && card.dataset.group === group);
+  });
+}
 
 async function handleAction(button) {
   const type = button.dataset.action;
@@ -410,6 +420,22 @@ app.addEventListener('click', async event => {
   if (victim) { selectedId = Number(victim.dataset.victim); mode = 'select'; panelTab = 'actions'; render(); return; }
   if (card) { selectedId = Number(card.dataset.person); mode = movementContext()?.ids.includes(selectedId) ? 'destination' : 'select'; panelTab = 'actions'; render(); return; }
   if (block) return handleBlock(Number(block.dataset.block));
+});
+app.addEventListener('pointerover', event => {
+  const choice = event.target.closest('[data-group-choice]');
+  if (choice) previewGroup(choice.dataset.groupChoice);
+});
+app.addEventListener('pointerout', event => {
+  const choice = event.target.closest('[data-group-choice]');
+  if (choice && !choice.contains(event.relatedTarget)) previewGroup(null);
+});
+app.addEventListener('focusin', event => {
+  const choice = event.target.closest('[data-group-choice]');
+  if (choice) previewGroup(choice.dataset.groupChoice);
+});
+app.addEventListener('focusout', event => {
+  const choice = event.target.closest('[data-group-choice]');
+  if (choice && !choice.contains(event.relatedTarget)) previewGroup(null);
 });
 app.addEventListener('change', event => {
   if (event.target.id === 'question-select') question = Number(event.target.value);
