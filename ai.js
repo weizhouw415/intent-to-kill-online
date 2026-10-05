@@ -30,6 +30,42 @@ function validCivilianDestinations(game, from) {
     .filter(block => occupants(game, block).length < 3);
 }
 
+function chooseCivilianMove(game, ids, role) {
+  const rankedSuspects = new Map(candidateScores(game).map((item, index) => [item.candidate.id, index]));
+  const options = ids.flatMap(id => {
+    const civilian = game.civilians.find(c => !c.dead && c.id === id);
+    if (!civilian) return [];
+    return validCivilianDestinations(game, civilian.block).map(block => ({ civilian, block }));
+  });
+  return options.sort((a, b) => {
+    if (role === 'detective') {
+      const suspectOrder = (rankedSuspects.get(a.civilian.id) ?? 99) - (rankedSuspects.get(b.civilian.id) ?? 99);
+      return suspectOrder || distance(a.block, game.detectiveBlock) - distance(b.block, game.detectiveBlock)
+        || occupants(game, a.block).length - occupants(game, b.block).length;
+    }
+    const aIsKiller = a.civilian.id === game.secret.killerId;
+    const bIsKiller = b.civilian.id === game.secret.killerId;
+    if (aIsKiller !== bIsKiller) return aIsKiller ? -1 : 1;
+    return distance(b.block, game.detectiveBlock) - distance(a.block, game.detectiveBlock)
+      || occupants(game, a.block).length - occupants(game, b.block).length;
+  })[0];
+}
+
+function computerTestimony(game, pending) {
+  if (!pending.mayLie) return pending.truthful;
+  let decoy = game.civilians.find(c => !c.dead && c.id === game.ai.decoyId);
+  if (!decoy || decoy.id === game.secret.killerId) {
+    const killer = game.civilians.find(c => c.id === game.secret.killerId);
+    const traits = ['sex', 'age', 'build', 'height'];
+    decoy = game.civilians
+      .filter(c => !c.dead && c.id !== game.secret.killerId)
+      .sort((a, b) => traits.filter(key => b[key] !== killer[key]).length - traits.filter(key => a[key] !== killer[key]).length || a.id - b.id)[0];
+    game.ai.decoyId = decoy?.id;
+  }
+  const question = QUESTIONS[pending.questionIndex];
+  return question && decoy ? decoy[question[0]] === question[1] : pending.truthful;
+}
+
 function evacuationDestination(game, from) {
   const adjacentBlocks = validCivilianDestinations(game, from);
   if (adjacentBlocks.length) return adjacentBlocks.sort((a, b) => occupants(game, a).length - occupants(game, b).length)[0];
@@ -94,6 +130,12 @@ function detectiveStep(game) {
     return;
   }
   if (game.fireRemaining?.length) {
+    const move = chooseCivilianMove(game, game.fireRemaining, 'detective');
+    if (move) act(game, 'detective', 'fire_move', { id: move.civilian.id, block: move.block });
+    else act(game, 'detective', 'fire_done');
+    return;
+  }
+  if (game.fireGroup !== null) {
     act(game, 'detective', 'fire_done');
     return;
   }
@@ -155,7 +197,7 @@ function detectiveStep(game) {
 function aiStep(game) {
   const role = game.ai.role;
   if (game.pending) {
-    const answer = game.pending.mayLie ? !game.pending.truthful : game.pending.truthful;
+    const answer = computerTestimony(game, game.pending);
     act(game, 'killer', 'answer', { answer });
     return;
   }
@@ -204,7 +246,11 @@ function aiStep(game) {
   }
   if (game.phase === 'city_killer' || game.phase === 'city_detective') {
     if (game.chooseCityGroup) act(game, role, 'city_choose_group', { group: largestGroup(game) });
-    else act(game, role, 'city_done');
+    else {
+      const move = chooseCivilianMove(game, game.moveRemaining || [], role);
+      if (move) act(game, role, 'city_move', { id: move.civilian.id, block: move.block });
+      else act(game, role, 'city_done');
+    }
     return;
   }
   if (game.phase === 'round_end') {

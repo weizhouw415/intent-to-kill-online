@@ -135,3 +135,55 @@ test('a complete human-killer solo game handles computer questions and final acc
   assert.ok(['killer', 'detective'].includes(game.winner));
   assert.ok(game.ai.answers.length > 0);
 });
+
+test('computer killer gives a consistent decoy profile instead of always inverting answers', () => {
+  const game = createGame('DECOY1', 'detective', 'human-token');
+  game.mode = 'single';
+  game.ai = { role: 'killer', humanRole: 'detective', answers: [] };
+  joinGame(game, 'killer', 'computer-token');
+  game.phase = 'detective';
+
+  const witness = game.civilians[0];
+  game.pending = { id: witness.id, questionIndex: 0, source: 'question', truthful: false, mayLie: true };
+  advanceAI(game);
+  const maleAnswer = /“是”/.test(game.log[0].text);
+
+  game.pending = { id: witness.id, questionIndex: 1, source: 'question', truthful: true, mayLie: true };
+  advanceAI(game);
+  const femaleAnswer = /“是”/.test(game.log[0].text);
+
+  assert.notEqual(maleAnswer, femaleAnswer);
+  assert.ok(Number.isInteger(game.ai.decoyId));
+});
+
+test('computer uses legal city movement instead of immediately skipping it', () => {
+  const game = singleGame('detective');
+  const civilian = game.civilians[0];
+  const before = civilian.block;
+  game.phase = 'city_killer';
+  game.chooseCityGroup = false;
+  game.moveGroup = civilian.group;
+  game.moveRemaining = [civilian.id];
+
+  advanceAI(game);
+  assert.notEqual(civilian.block, before);
+  assert.equal(game.phase, 'city_detective');
+});
+
+test('computer detective uses legal fire station movement', () => {
+  const game = createGame('FIREAI', 'killer', 'human-token');
+  game.mode = 'single';
+  game.ai = { role: 'detective', humanRole: 'killer', answers: [] };
+  joinGame(game, 'detective', 'computer-token');
+  const civilian = game.civilians[0];
+  const before = civilian.block;
+  game.phase = 'detective';
+  game.detectiveBlock = 7;
+  game.actions = ['fire'];
+  game.fireGroup = civilian.group;
+  game.fireRemaining = [civilian.id];
+
+  advanceAI(game);
+  assert.notEqual(civilian.block, before);
+  assert.ok(game.phase === 'detective' || game.phase === 'city_killer');
+});

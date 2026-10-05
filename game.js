@@ -90,6 +90,9 @@ function winner(game, role, why) {
   game.phase = 'finished'; game.winner = role; game.endReason = why;
   log(game, `${role === 'killer' ? '凶手' : '侦探'}获胜：${why}`);
 }
+function fireActionActive(game) {
+  return game.firePick || game.fireGroup !== null;
+}
 
 export function createGame(code, firstRole, firstToken) {
   return { code, createdAt: Date.now(), players: { [firstRole]: firstToken }, phase: 'waiting', round: 1,
@@ -174,7 +177,7 @@ function endCityTurn(game) {
 }
 function ensureDetectiveAction(game, kind) {
   assert(game.phase === 'detective', '当前不是侦探调查阶段');
-  assert(kind === 'fire' || (!game.firePick && !(game.fireRemaining || []).length), '请先完成消防局移动');
+  assert(kind === 'fire' || !fireActionActive(game), '请先完成消防局移动');
   assert(game.actions.length < 2 || game.actions.includes(kind), '本回合已用完两项行动');
   assert(!game.actions.includes(kind) || kind === 'question', '每种行动每回合只能使用一次');
   if (!game.actions.includes(kind)) game.actions.push(kind);
@@ -195,6 +198,11 @@ export function act(game, role, type, payload = {}) {
   const id = Number(payload.id), block = Number(payload.block), questionIndex = Number(payload.question);
   const previousLog = game.log[0];
   if (game.phase === 'finished') fail('对局已经结束');
+  assert(!game.pending || type === 'answer', '请等待凶手回答上一问题');
+  assert(
+    game.phase !== 'detective' || !fireActionActive(game) || ['fire_choose_group', 'fire_move', 'fire_done'].includes(type),
+    '请先完成消防局移动',
+  );
   switch (type) {
     case 'choose_support': {
       assert(role === 'killer' && game.phase === 'setup_support', '当前不能选择支持者');
@@ -372,11 +380,12 @@ export function act(game, role, type, payload = {}) {
     }
     case 'next_round': {
       assert(role === 'detective' && game.phase === 'round_end' && game.victims.length < 5, '当前不能进入下一回合');
+      assert(game.round < 6, '第六回合结束后不能继续');
       game.round++; game.phase = 'killer_intimidate'; game.intimidations = 0;
       log(game, `第 ${game.round} 回合开始。`); break;
     }
     case 'accuse': {
-      assert(role === 'detective' && game.phase === 'round_end' && game.victims.length >= 3, '至少完成三回合后才可指认');
+      assert(role === 'detective' && game.phase === 'round_end' && game.round >= 3, '至少完成三回合后才可指认');
       assert(game.civilians.some(c => c.id === id) && MOTIVES.some(m => m.id === payload.motive), '请选择嫌疑人与动机');
       game.accusation = { id, motive: payload.motive };
       if (id === game.secret.killerId && payload.motive === game.secret.motive) winner(game, 'detective', '成功指认凶手和动机');

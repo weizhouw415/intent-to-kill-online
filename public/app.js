@@ -57,6 +57,7 @@ function acceptState(next) {
     selectedId = null; mode = 'select'; panelTab = 'actions';
   } else {
     state = next;
+    if (state.firePick || state.fireGroup !== null) mode = 'select';
     if (selectedId !== null && !canSelect(selectedId)) selectedId = null;
   }
   render();
@@ -266,26 +267,27 @@ function actionPanel() {
     const used = kind => state.actions.includes(kind);
     const noAction = state.actions.length >= 2;
     const pending = !!state.pending;
+    const fireActive = state.firePick || state.fireGroup !== null;
     return `<div class="resources"><span>行动 <b>${2-state.actions.length} / 2</b></span><span>移动 <b>${state.moves} / 2</b></span><span>当前位置 <b>${escapeHtml(state.blockNames[state.detectiveBlock])}</b></span></div>
       ${pending ? '<div class="instruction waiting"><b>等待证词</b><p>凶手玩家正在回答讯问。</p></div>' : `<div class="action-stack">
-        ${actionButton(mode === 'move' ? '取消移动侦探' : '移动侦探：点击相邻街区', 'ui_move', {}, mode === 'move' ? 'secondary active wide' : 'secondary wide', state.moves === 0)}
+        ${actionButton(mode === 'move' ? '取消移动侦探' : '移动侦探：点击相邻街区', 'ui_move', {}, mode === 'move' ? 'secondary active wide' : 'secondary wide', state.moves === 0 || fireActive)}
         <div class="action-divider">讯问与建筑行动</div>
         ${questionSelect()}
-        ${c && c.block === state.detectiveBlock ? actionButton(`讯问 ${escapeHtml(c.name)}`, 'question', { id:c.id }, 'secondary wide', c.intimidated || state.questioned.includes(c.id) || (noAction && !used('question'))) : ''}
-        ${building === '餐馆' && c && near ? actionButton(`餐馆：讯问 ${escapeHtml(c.name)}`, 'diner', { id:c.id }, 'secondary wide', c.intimidated || used('diner') || noAction) : ''}
-        ${building === '警局' && c && near ? actionButton(`警局：监视 ${escapeHtml(c.name)}`, 'surveil_place', { id:c.id }, 'secondary wide', used('police') || noAction) : ''}
-        ${state.surveillance !== null ? actionButton(`查看监视结果：${escapeHtml(person(state.surveillance)?.name)}`, 'surveil_check', {}, 'accent wide') : ''}
-        ${building === '医院' && c && near ? actionButton(`医院：安抚 ${escapeHtml(c.name)}`, 'comfort', { id:c.id }, 'secondary wide', !c.intimidated || used('hospital') || noAction) : ''}
+        ${c && c.block === state.detectiveBlock ? actionButton(`讯问 ${escapeHtml(c.name)}`, 'question', { id:c.id }, 'secondary wide', fireActive || c.intimidated || state.questioned.includes(c.id) || (noAction && !used('question'))) : ''}
+        ${building === '餐馆' && c && near ? actionButton(`餐馆：讯问 ${escapeHtml(c.name)}`, 'diner', { id:c.id }, 'secondary wide', fireActive || c.intimidated || used('diner') || noAction) : ''}
+        ${building === '警局' && c && near ? actionButton(`警局：监视 ${escapeHtml(c.name)}`, 'surveil_place', { id:c.id }, 'secondary wide', fireActive || used('police') || noAction) : ''}
+        ${state.surveillance !== null ? actionButton(`查看监视结果：${escapeHtml(person(state.surveillance)?.name)}`, 'surveil_check', {}, 'accent wide', fireActive) : ''}
+        ${building === '医院' && c && near ? actionButton(`医院：安抚 ${escapeHtml(c.name)}`, 'comfort', { id:c.id }, 'secondary wide', fireActive || !c.intimidated || used('hospital') || noAction) : ''}
         ${building === '消防局' ? actionButton('消防局：抽群体移动', 'fire', {}, 'secondary wide', used('fire') || noAction) : ''}
         ${state.firePick ? `<div class="instruction"><b>消防局：自选群体</b><p>抽到的群体已不在城中，请选择一个在场群体。</p></div><div class="choice-grid">${state.groups.filter(g => state.civilians.some(c => !c.dead && c.group === g)).map(g => groupChoiceButton(g, 'fire_choose_group')).join('')}</div>` : ''}
         ${state.fireGroup ? `${movementGuide({ kind:'fire', group:state.fireGroup, ids:state.fireRemaining || [] })}${actionButton('结束消防局移动', 'fire_done', {}, 'text-button wide')}` : ''}
-        ${actionButton('结束调查，进入城市阶段', 'end_detective', {}, 'primary wide')}
+        ${actionButton('结束调查，进入城市阶段', 'end_detective', {}, 'primary wide', fireActive)}
       </div>`}`;
   }
   if (state.phase === 'city_killer' || state.phase === 'city_detective') return mine ? `${state.chooseCityGroup ? `<div class="instruction"><b>自选在场群体</b><p>抽到的群体已离城，请选择另一个在场群体。</p></div><div class="choice-grid">${state.groups.filter(g => state.civilians.some(c => !c.dead && c.group === g)).map(g => groupChoiceButton(g, 'city_choose_group')).join('')}</div>` : state.moveGroup ? movementGuide({ kind:'city', group:state.moveGroup, ids:state.moveRemaining || [] }) : '<div class="instruction waiting"><b>没有可移动社群</b><p>社群标记已用完，可以直接完成城市行动。</p></div>'}${c && state.moveRemaining.includes(c.id) ? '<div class="hint-chip move-selected">✓ 已选中人物 · 地图上发光街区均可到达</div>' : ''}${actionButton('完成我的城市行动', 'city_done', {}, 'primary wide')}` : waitingPanel(`${otherRole(state.role)}正在移动市民`);
   if (state.phase === 'round_end') {
     if (!mine) return waitingPanel('侦探正在整理结论');
-    const canAccuse = state.victims.length >= 3;
+    const canAccuse = state.round >= 3;
     return `<div class="instruction"><b>${state.victims.length === 5 ? '最终指认' : '本回合结束'}</b><p>${state.victims.length === 5 ? '五起命案结束后，必须指出凶手和动机。' : '可以继续调查；从第三回合起也可提前指认。'}</p></div>
       ${canAccuse ? `<div class="accuse-form"><label>嫌疑人</label><select id="suspect-select"><option value="">请选择</option>${state.civilians.map(x => `<option value="${x.id}" ${selectedId === x.id ? 'selected' : ''}>${escapeHtml(x.name)}</option>`).join('')}</select><label>真实动机</label><select id="motive-select">${state.motives.map(m => `<option value="${m.id}" ${motiveGuess === m.id ? 'selected' : ''}>${m.name}</option>`).join('')}</select>${actionButton('提交最终指认', 'accuse', {}, 'primary danger wide', selectedId === null)}</div>` : ''}
       ${state.victims.length < 5 ? actionButton('进入下一回合', 'next_round', {}, 'secondary wide') : ''}`;
