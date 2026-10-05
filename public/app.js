@@ -12,6 +12,8 @@ let mode = 'select';
 let question = 0;
 let motiveGuess = 'maniac';
 let panelTab = 'actions';
+let historyRound = null;
+let resultModalOpen = false;
 let stream = null;
 let busy = false;
 let joinCode = inviteCode;
@@ -48,6 +50,7 @@ async function request(path, options = {}) {
   return data;
 }
 function acceptState(next) {
+  const enteringFinished = next.phase === 'finished' && state?.phase !== 'finished';
   const nextRole = nextHandoff(session, next);
   if (nextRole) {
     session.activeRole = nextRole;
@@ -57,6 +60,7 @@ function acceptState(next) {
     selectedId = null; mode = 'select'; panelTab = 'actions';
   } else {
     state = next;
+    if (enteringFinished) resultModalOpen = true;
     if (state.firePick || state.fireGroup !== null) mode = 'select';
     if (selectedId !== null && !canSelect(selectedId)) selectedId = null;
   }
@@ -99,7 +103,7 @@ function setSession(result) {
   session = result;
   localStorage.setItem('itk-session', JSON.stringify(result));
   history.replaceState({}, '', '/');
-  state = null; handoff = null; selectedId = null; mode = 'select'; panelTab = 'actions';
+  state = null; handoff = null; selectedId = null; mode = 'select'; panelTab = 'actions'; historyRound = null; resultModalOpen = false;
   connect();
 }
 function portrait(c, large = false) {
@@ -292,18 +296,35 @@ function actionPanel() {
       ${canAccuse ? `<div class="accuse-form"><label>嫌疑人</label><select id="suspect-select"><option value="">请选择</option>${state.civilians.map(x => `<option value="${x.id}" ${selectedId === x.id ? 'selected' : ''}>${escapeHtml(x.name)}</option>`).join('')}</select><label>真实动机</label><select id="motive-select">${state.motives.map(m => `<option value="${m.id}" ${motiveGuess === m.id ? 'selected' : ''}>${m.name}</option>`).join('')}</select>${actionButton('提交最终指认', 'accuse', {}, 'primary danger wide', selectedId === null)}</div>` : ''}
       ${state.victims.length < 5 ? actionButton('进入下一回合', 'next_round', {}, 'secondary wide') : ''}`;
   }
-  if (state.phase === 'finished') return `<div class="verdict ${state.winner}"><span>CASE CLOSED</span><h3>${roleName(state.winner)}获胜</h3><p>${escapeHtml(state.endReason)}</p></div><div class="solution"><b>真实凶手</b><span>${escapeHtml(person(state.secret.killerId)?.name)}</span><b>真实动机</b><span>${escapeHtml(state.motives.find(m => m.id === state.secret.motive)?.name)}</span><b>支持者群体</b><span>${escapeHtml(state.secret.supporter)}</span></div>`;
+  if (state.phase === 'finished') return `<div class="verdict ${state.winner}"><span>CASE CLOSED</span><h3>${roleName(state.winner)}获胜</h3><p>${escapeHtml(state.endReason)}</p>${actionButton('查看完整结算', 'ui_result', {}, 'primary wide')}</div>`;
   return '';
 }
 function waitingPanel(text) { return `<div class="instruction waiting"><b>${escapeHtml(text)}</b><p>棋盘会自动同步更新。</p><div class="loading-dots"><i></i><i></i><i></i></div></div>`; }
 function secretPanel() {
   if (state.role !== 'killer' || !state.secret || state.phase === 'finished') return '';
   const killer = person(state.secret.killerId), interest = person(state.secret.interestId), motive = state.motives.find(m => m.id === state.secret.motive);
-  return `<details class="secret-panel"><summary>🔒 我的秘密档案 <span>仅凶手可见</span></summary><div><p><b>凶手身份</b><strong>${escapeHtml(killer?.name)}</strong></p><p><b>相关人</b><strong>${escapeHtml(interest?.name)}</strong></p><p><b>动机</b><strong>${escapeHtml(motive?.name)}</strong></p><p class="secret-rule">${escapeHtml(motive?.rule)}</p><p><b>支持者</b><strong>${escapeHtml(state.secret.supporter || '待选择')}</strong></p></div></details>`;
+  return `<details class="secret-panel"><summary>🔒 我的秘密档案 <span>仅凶手可见</span></summary><div><p class="secret-preview" tabindex="0" data-preview-person="${killer?.id}"><b>凶手身份</b><strong>${escapeHtml(killer?.name)}</strong></p><p class="secret-preview" tabindex="0" data-preview-person="${interest?.id}"><b>相关人</b><strong>${escapeHtml(interest?.name)}</strong></p><p><b>动机</b><strong>${escapeHtml(motive?.name)}</strong></p><p class="secret-rule">${escapeHtml(motive?.rule)}</p><p class="secret-preview" tabindex="0" data-preview-group="${escapeHtml(state.secret.supporter || '')}"><b>支持者</b><strong>${escapeHtml(state.secret.supporter || '待选择')}</strong></p></div></details>`;
 }
 function activityPanel() {
   const entries = state.actionLog || [];
-  return `<div class="activity-panel"><span class="eyebrow">ACTION HISTORY</span><h3>行动记录</h3><p class="activity-intro">按时间记录侦探与凶手执行的全部行动。</p>${entries.length ? `<div class="activity-list">${entries.map(entry => `<article class="activity-entry ${entry.role}"><div class="activity-meta"><span class="activity-role">${roleName(entry.role)}</span><span>第 ${entry.round} 回合</span><time>${new Date(entry.at).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' })}</time></div><b>${escapeHtml(entry.label)}</b><p>${escapeHtml(entry.text)}</p></article>`).join('')}</div>` : '<div class="activity-empty"><span>◎</span><b>暂无行动</b><p>双方执行行动后会自动记录在这里。</p></div>'}</div>`;
+  const rounds = [...new Set(entries.map(entry => entry.round))].sort((a, b) => a - b);
+  const activeRound = rounds.includes(historyRound) ? historyRound : rounds.at(-1);
+  const pageEntries = entries.filter(entry => entry.round === activeRound);
+  return `<div class="activity-panel"><span class="eyebrow">ACTION HISTORY</span><h3>行动记录</h3><p class="activity-intro">按回合查看侦探与凶手执行的行动。</p>${entries.length ? `<div class="round-pagination" aria-label="行动记录回合分页">${rounds.map(round => `<button data-ui="history-round" data-round="${round}" class="${round === activeRound ? 'active' : ''}" aria-current="${round === activeRound ? 'page' : 'false'}">${String(round).padStart(2, '0')}</button>`).join('')}</div><div class="activity-page-title"><b>第 ${activeRound} 回合</b><span>${pageEntries.length} 条记录</span></div><div class="activity-list">${pageEntries.map(entry => `<article class="activity-entry ${entry.role}"><div class="activity-meta"><span class="activity-role">${roleName(entry.role)}</span><time>${new Date(entry.at).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' })}</time></div><b>${escapeHtml(entry.label)}</b><p>${escapeHtml(entry.text)}</p></article>`).join('')}</div>` : '<div class="activity-empty"><span>◎</span><b>暂无行动</b><p>双方执行行动后会自动记录在这里。</p></div>'}</div>`;
+}
+
+function resultModal() {
+  if (state.phase !== 'finished' || !resultModalOpen || !state.secret) return '';
+  const won = state.role === state.winner;
+  const accusation = state.accusation;
+  const accused = accusation ? person(accusation.id) : null;
+  const guessedMotive = accusation ? state.motives.find(m => m.id === accusation.motive) : null;
+  const killer = person(state.secret.killerId);
+  const interest = person(state.secret.interestId);
+  const motive = state.motives.find(m => m.id === state.secret.motive);
+  const identityCorrect = accusation && accusation.id === state.secret.killerId;
+  const motiveCorrect = accusation && accusation.motive === state.secret.motive;
+  return `<div class="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><section class="result-dialog ${won ? 'won' : 'lost'}"><button class="result-close" data-ui="close-result" aria-label="关闭结算弹窗">×</button><div class="result-heading"><span class="eyebrow">CASE CLOSED · ROUND ${state.round}</span><div class="result-seal">${won ? 'WIN' : 'LOSS'}</div><h2 id="result-title">${won ? '你赢得了本局' : '本局惜败'}</h2><p>${escapeHtml(state.endReason)} · ${roleName(state.winner)}获胜</p></div><div class="result-columns"><article class="result-card accusation-card"><span class="result-card-no">01 / DETECTIVE</span><h3>侦探的最终选择</h3>${accusation ? `<dl><div><dt>嫌疑人</dt><dd>${escapeHtml(accused?.name || '未知')}<i class="${identityCorrect ? 'correct' : 'wrong'}">${identityCorrect ? '命中' : '错误'}</i></dd></div><div><dt>推测动机</dt><dd>${escapeHtml(guessedMotive?.name || '未知')}<i class="${motiveCorrect ? 'correct' : 'wrong'}">${motiveCorrect ? '命中' : '错误'}</i></dd></div></dl>` : `<div class="no-accusation"><b>未提交最终指认</b><p>本局在侦探指认前结束。</p></div>`}</article><article class="result-card truth-card"><span class="result-card-no">02 / MURDERER</span><h3>凶手的真实档案</h3><dl><div><dt>凶手身份</dt><dd>${escapeHtml(killer?.name)}</dd></div><div><dt>相关人</dt><dd>${escapeHtml(interest?.name)}</dd></div><div><dt>真实动机</dt><dd>${escapeHtml(motive?.name)}</dd></div><div><dt>支持者</dt><dd>${escapeHtml(state.secret.supporter)}</dd></div></dl><p>${escapeHtml(motive?.rule)}</p></article></div><div class="result-actions"><button class="secondary" data-ui="result-history">查看逐回合记录</button><button class="primary" data-ui="close-result">返回棋盘</button></div></section></div>`;
 }
 function renderGame() {
   const myTurn = state.role === turnOwner(state) || state.phase === 'finished';
@@ -321,23 +342,34 @@ function renderGame() {
     </div></aside></main>
     <section class="bottom-area"><div class="victim-row"><div class="bottom-title"><span class="eyebrow">VICTIM FILES</span><b>命案卷宗</b></div>${Array.from({length:5},(_,i) => { const v=state.victims[i]; const c=v && person(v.id); return c ? `<button class="victim-slot filled" data-victim="${c.id}" title="查看 ${escapeHtml(c.name)} 的完整档案"><span>${String(i+1).padStart(2,'0')} · 第 ${v.round} 回合</span><b>${escapeHtml(c.name)}</b><small>${escapeHtml(c.group)} · ${escapeHtml(c.sex)} · ${escapeHtml(c.age)}</small><small>${escapeHtml(c.build)} · ${escapeHtml(c.height)} · ${escapeHtml(state.blockNames[c.block])}</small></button>` : `<div class="victim-slot"><span>${String(i+1).padStart(2,'0')}</span><em>待发现</em></div>`; }).join('')}</div><div class="case-log"><div class="bottom-title"><span class="eyebrow">CASE LOG</span><b>案件日志</b></div><div class="log-scroll">${state.log.slice(0,6).map(entry => `<p><span>${String(entry.round).padStart(2,'0')}</span>${escapeHtml(entry.text)}</p>`).join('')}</div></div></section>
     <div class="game-footer"><span>本项目使用原创界面与人物图形 · 玩法参照《Intent to Kill》双人逻辑模式</span><span>${local ? '同机对战 · 换人时会自动遮挡屏幕' : single ? `单人挑战 · 电脑是${roleName(session.computerRole)}` : `房间邀请：<code>${escapeHtml(invite)}</code>`}</span></div>
-  </div>`;
+  </div>${resultModal()}`;
 }
 function render() { if (handoff) renderHandoff(); else if (!state) renderLobby(); else renderGame(); }
 
-function previewGroup(group) {
+function previewCards({ group = null, personId = null } = {}) {
   const board = app.querySelector('.board');
   if (!board) return;
-  board.classList.toggle('group-previewing', !!group);
+  const active = !!group || personId !== null;
+  board.classList.toggle('group-previewing', active);
   board.querySelectorAll('.person-card').forEach(card => {
-    card.classList.toggle('group-preview-match', !!group && card.dataset.group === group);
+    const matchesGroup = !!group && card.dataset.group === group;
+    const matchesPerson = personId !== null && Number(card.dataset.person) === Number(personId);
+    card.classList.toggle('group-preview-match', matchesGroup || matchesPerson);
   });
+}
+
+function previewElement(element) {
+  if (!element) return previewCards();
+  if (element.dataset.previewPerson !== undefined) return previewCards({ personId: Number(element.dataset.previewPerson) });
+  const group = element.dataset.previewGroup ?? element.dataset.groupChoice;
+  previewCards(group ? { group } : {});
 }
 
 async function handleAction(button) {
   const type = button.dataset.action;
   const payload = JSON.parse(button.dataset.payload || '{}');
   if (type === 'ui_move') { mode = mode === 'move' ? 'select' : 'move'; render(); return; }
+  if (type === 'ui_result') { resultModalOpen = true; render(); return; }
   if (['question','diner'].includes(type)) payload.question = question;
   if (type === 'accuse') { payload.id = selectedId; payload.motive = motiveGuess; }
   if (type === 'murder' && !confirm(`确定谋杀 ${person(payload.id)?.name}？此行动无法撤销。`)) return;
@@ -408,13 +440,16 @@ app.addEventListener('click', async event => {
         break;
       }
       case 'leave': {
-        if (confirm('退出此对局？当前浏览器保存的玩家身份将被清除。')) { localStorage.removeItem('itk-session'); session = null; state = null; handoff = null; stream?.close(); render(); }
+        if (confirm('退出此对局？当前浏览器保存的玩家身份将被清除。')) { localStorage.removeItem('itk-session'); session = null; state = null; handoff = null; historyRound = null; resultModalOpen = false; stream?.close(); render(); }
         break;
       }
       case 'tab-actions': panelTab = 'actions'; render(); break;
-      case 'tab-history': panelTab = 'history'; render(); break;
+      case 'tab-history': panelTab = 'history'; historyRound = null; render(); break;
       case 'tab-notes': panelTab = 'notes'; render(); break;
       case 'tab-rules': panelTab = 'rules'; render(); break;
+      case 'history-round': historyRound = Number(ui.dataset.round); render(); break;
+      case 'close-result': resultModalOpen = false; render(); break;
+      case 'result-history': resultModalOpen = false; panelTab = 'history'; historyRound = null; render(); break;
     }
     return;
   }
@@ -424,20 +459,20 @@ app.addEventListener('click', async event => {
   if (block) return handleBlock(Number(block.dataset.block));
 });
 app.addEventListener('pointerover', event => {
-  const choice = event.target.closest('[data-group-choice]');
-  if (choice) previewGroup(choice.dataset.groupChoice);
+  const preview = event.target.closest('[data-group-choice],[data-preview-person],[data-preview-group]');
+  if (preview) previewElement(preview);
 });
 app.addEventListener('pointerout', event => {
-  const choice = event.target.closest('[data-group-choice]');
-  if (choice && !choice.contains(event.relatedTarget)) previewGroup(null);
+  const preview = event.target.closest('[data-group-choice],[data-preview-person],[data-preview-group]');
+  if (preview && !preview.contains(event.relatedTarget)) previewCards();
 });
 app.addEventListener('focusin', event => {
-  const choice = event.target.closest('[data-group-choice]');
-  if (choice) previewGroup(choice.dataset.groupChoice);
+  const preview = event.target.closest('[data-group-choice],[data-preview-person],[data-preview-group]');
+  if (preview) previewElement(preview);
 });
 app.addEventListener('focusout', event => {
-  const choice = event.target.closest('[data-group-choice]');
-  if (choice && !choice.contains(event.relatedTarget)) previewGroup(null);
+  const preview = event.target.closest('[data-group-choice],[data-preview-person],[data-preview-group]');
+  if (preview && !preview.contains(event.relatedTarget)) previewCards();
 });
 app.addEventListener('change', event => {
   if (event.target.id === 'question-select') question = Number(event.target.value);
