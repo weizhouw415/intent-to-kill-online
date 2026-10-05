@@ -29,6 +29,7 @@ const roleName = role => role === 'killer' ? '凶手' : '侦探';
 const otherRole = role => role === 'killer' ? '侦探' : '凶手';
 const activeRole = phase => ['setup_support','killer_intimidate','killer_murder','city_killer'].includes(phase) ? 'killer' : ['setup_detective','evacuate','detective','city_detective','round_end'].includes(phase) ? 'detective' : null;
 const noteKey = () => `itk-notes-${state.code}-${state.role}`;
+const evidenceKey = () => `itk-evidence-${state.code}-${state.role}`;
 const canSelect = id => !!person(id) && !person(id).dead;
 const adjacent = (a,b) => Math.abs(Math.floor(a/4)-Math.floor(b/4)) + Math.abs(a%4-b%4) === 1;
 const canMoveCivilianTo = (c, block) => !!c && adjacent(c.block, block) && !state.scenes.some(s => s.block === block) && grouped(block).length < 3;
@@ -38,6 +39,28 @@ function toast(message, isError = false) {
   toastEl.className = isError ? 'show error' : 'show';
   clearTimeout(toastEl.timer);
   toastEl.timer = setTimeout(() => toastEl.className = '', 3400);
+}
+function evidenceState() {
+  try {
+    const savedEvidence = JSON.parse(localStorage.getItem(evidenceKey()) || '{}');
+    return { motives:savedEvidence.motives || {}, groups:savedEvidence.groups || {} };
+  } catch {
+    return { motives:{}, groups:{} };
+  }
+}
+function updateEvidence(kind, id, status) {
+  const evidence = evidenceState();
+  const current = evidence[kind]?.[id];
+  if (current === status) delete evidence[kind][id];
+  else evidence[kind][id] = status;
+  localStorage.setItem(evidenceKey(), JSON.stringify(evidence));
+  render();
+}
+function evidenceControls(kind, id, status) {
+  return `<div class="evidence-controls" role="group" aria-label="判断状态">
+    <button class="possible ${status === 'possible' ? 'active' : ''}" data-evidence-kind="${kind}" data-evidence-id="${escapeHtml(id)}" data-evidence-status="possible" aria-pressed="${status === 'possible'}" title="标记为可能">✓<span>可能</span></button>
+    <button class="excluded ${status === 'excluded' ? 'active' : ''}" data-evidence-kind="${kind}" data-evidence-id="${escapeHtml(id)}" data-evidence-status="excluded" aria-pressed="${status === 'excluded'}" title="标记为排除">×<span>排除</span></button>
+  </div>`;
 }
 async function request(path, options = {}) {
   const authToken = session?.mode === 'local' ? session.tokens[session.activeRole] : session?.token;
@@ -51,6 +74,8 @@ async function request(path, options = {}) {
 }
 function acceptState(next) {
   const enteringFinished = next.phase === 'finished' && state?.phase !== 'finished';
+  const wasMyTurn = !!state && turnOwner(state) === state.role;
+  const becomesMyTurn = turnOwner(next) === next.role;
   const nextRole = nextHandoff(session, next);
   if (nextRole) {
     session.activeRole = nextRole;
@@ -60,6 +85,7 @@ function acceptState(next) {
     selectedId = null; mode = 'select'; panelTab = 'actions';
   } else {
     state = next;
+    if (!wasMyTurn && becomesMyTurn && session?.mode !== 'local') toast('该你操作了');
     if (enteringFinished) resultModalOpen = true;
     if (state.firePick || state.fireGroup !== null) mode = 'select';
     if (selectedId !== null && !canSelect(selectedId)) selectedId = null;
@@ -313,6 +339,13 @@ function activityPanel() {
   return `<div class="activity-panel"><span class="eyebrow">ACTION HISTORY</span><h3>行动记录</h3><p class="activity-intro">按回合查看侦探与凶手执行的行动。</p>${entries.length ? `<div class="round-pagination" aria-label="行动记录回合分页">${rounds.map(round => `<button data-ui="history-round" data-round="${round}" class="${round === activeRound ? 'active' : ''}" aria-current="${round === activeRound ? 'page' : 'false'}">${String(round).padStart(2, '0')}</button>`).join('')}</div><div class="activity-page-title"><b>第 ${activeRound} 回合</b><span>${pageEntries.length} 条记录</span></div><div class="activity-list">${pageEntries.map(entry => `<article class="activity-entry ${entry.role}"><div class="activity-meta"><span class="activity-role">${roleName(entry.role)}</span><time>${new Date(entry.at).toLocaleTimeString('zh-CN', { hour:'2-digit', minute:'2-digit' })}</time></div><b>${escapeHtml(entry.label)}</b><p>${escapeHtml(entry.text)}</p></article>`).join('')}</div>` : '<div class="activity-empty"><span>◎</span><b>暂无行动</b><p>双方执行行动后会自动记录在这里。</p></div>'}</div>`;
 }
 
+function notesPanel() {
+  const evidence = evidenceState();
+  return `<div class="notes-panel"><span class="eyebrow">PRIVATE NOTEBOOK</span><h3>调查笔记</h3><p>${session?.mode === 'local' ? '仅当前角色可在游戏界面看到自己的笔记。' : '仅保存在当前浏览器，不会共享给对手。'}</p><textarea id="notes" placeholder="记录嫌疑人、证词、动机推断……">${escapeHtml(localStorage.getItem(noteKey()) || '')}</textarea><div class="notes-footer">自动保存</div></div>
+    <section class="evidence-list motive-list"><div class="evidence-heading"><div><span class="eyebrow">MOTIVE</span><h4>可能动机</h4></div><small>标记可能或排除</small></div>${state.motives.map(m => { const status = evidence.motives[m.id]; return `<article class="evidence-row ${status || ''}"><div class="evidence-copy"><b>${escapeHtml(m.name)}</b><span>${escapeHtml(m.rule)}</span></div>${evidenceControls('motives', m.id, status)}</article>`; }).join('')}</section>
+    <section class="evidence-list group-list"><div class="evidence-heading"><div><span class="eyebrow">SUPPORT GROUP</span><h4>支持阵营（社群）</h4></div><small>9 个阵营</small></div><p class="evidence-help">记录哪些社群可能帮助凶手说谎。</p>${state.groups.map(group => { const status = evidence.groups[group]; return `<article class="evidence-row group-evidence ${status || ''}" style="--evidence-color:${palette[groupPalette[group]]}"><div class="evidence-copy"><i></i><b>${escapeHtml(group)}</b></div>${evidenceControls('groups', group, status)}</article>`; }).join('')}</section>`;
+}
+
 function resultModal() {
   if (state.phase !== 'finished' || !resultModalOpen || !state.secret) return '';
   const won = state.role === state.winner;
@@ -327,17 +360,20 @@ function resultModal() {
   return `<div class="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title"><section class="result-dialog ${won ? 'won' : 'lost'}"><button class="result-close" data-ui="close-result" aria-label="关闭结算弹窗">×</button><div class="result-heading"><span class="eyebrow">CASE CLOSED · ROUND ${state.round}</span><div class="result-seal">${won ? 'WIN' : 'LOSS'}</div><h2 id="result-title">${won ? '你赢得了本局' : '本局惜败'}</h2><p>${escapeHtml(state.endReason)} · ${roleName(state.winner)}获胜</p></div><div class="result-columns"><article class="result-card accusation-card"><span class="result-card-no">01 / DETECTIVE</span><h3>侦探的最终选择</h3>${accusation ? `<dl><div><dt>嫌疑人</dt><dd>${escapeHtml(accused?.name || '未知')}<i class="${identityCorrect ? 'correct' : 'wrong'}">${identityCorrect ? '命中' : '错误'}</i></dd></div><div><dt>推测动机</dt><dd>${escapeHtml(guessedMotive?.name || '未知')}<i class="${motiveCorrect ? 'correct' : 'wrong'}">${motiveCorrect ? '命中' : '错误'}</i></dd></div></dl>` : `<div class="no-accusation"><b>未提交最终指认</b><p>本局在侦探指认前结束。</p></div>`}</article><article class="result-card truth-card"><span class="result-card-no">02 / MURDERER</span><h3>凶手的真实档案</h3><dl><div><dt>凶手身份</dt><dd>${escapeHtml(killer?.name)}</dd></div><div><dt>相关人</dt><dd>${escapeHtml(interest?.name)}</dd></div><div><dt>真实动机</dt><dd>${escapeHtml(motive?.name)}</dd></div><div><dt>支持者</dt><dd>${escapeHtml(state.secret.supporter)}</dd></div></dl><p>${escapeHtml(motive?.rule)}</p></article></div><div class="result-actions"><button class="secondary" data-ui="result-history">查看逐回合记录</button><button class="primary" data-ui="close-result">返回棋盘</button></div></section></div>`;
 }
 function renderGame() {
-  const myTurn = state.role === turnOwner(state) || state.phase === 'finished';
+  const owner = turnOwner(state);
+  const myTurn = state.role === owner;
+  const turnClass = myTurn ? `turn-active turn-${state.role}` : owner ? 'turn-waiting' : '';
   const invite = `${inviteOrigin}/?room=${encodeURIComponent(state.code)}`;
   const local = session?.mode === 'local';
   const single = session?.mode === 'single';
-  app.innerHTML = `<div class="game-shell">
+  app.innerHTML = `<div class="game-shell ${turnClass}">
     <header class="game-header"><div class="brand"><span class="brand-mark">◆</span><div><strong>暗藏杀机</strong><small>INTENT TO KILL</small></div></div><div class="header-middle"><span class="case-label">CASE № ${state.code}</span><span class="phase-pill ${myTurn ? 'my-turn' : ''}">${phaseLabel()}</span><span class="round-label">第 ${state.round} 回合</span></div><div class="header-right"><span class="role-badge ${state.role}">我的身份 · ${roleName(state.role)}</span>${local ? '<button class="icon-button" data-ui="cover" title="遮挡棋盘">▦ 遮挡屏幕</button>' : single ? '<span class="ai-badge">◉ 电脑对手</span>' : '<button class="icon-button" data-ui="copy" title="复制邀请链接">⌁ 分享</button>'}</div></header>
     <div class="room-strip"><span>${local ? '同机双人 · 轮流操作' : single ? `单人模式 · 电脑扮演${roleName(session.computerRole)}` : `房间码 <b>${state.code}</b>`}</span><span>${state.players.killer ? '●' : '○'} 凶手 ${state.players.detective ? '●' : '○'} 侦探</span><span>已发生 <b>${state.victims.length} / 5</b> 起命案</span><button data-ui="leave">离开房间</button></div>
+    ${owner ? `<div class="turn-cue ${myTurn ? 'active' : 'waiting'}" role="status"><span>${myTurn ? '● YOUR TURN' : '○ OPPONENT TURN'}</span><b>${myTurn ? '该你操作了' : `等待${roleName(owner)}操作`}</b><small>${myTurn ? `${roleName(state.role)} · ${phaseLabel()}` : '对方完成后棋盘会自动更新'}</small></div>` : ''}
     <main class="game-main">${renderBoard()}<aside class="side-panel"><div class="side-tabs"><button data-ui="tab-actions" class="${panelTab === 'actions' ? 'active' : ''}">行动</button><button data-ui="tab-history" class="${panelTab === 'history' ? 'active' : ''}">记录</button><button data-ui="tab-notes" class="${panelTab === 'notes' ? 'active' : ''}">笔记</button><button data-ui="tab-rules" class="${panelTab === 'rules' ? 'active' : ''}">规则</button></div><div class="side-content">
       ${panelTab === 'actions' ? `${selectedPanel()}<div class="panel-section"><div class="section-title">当前阶段 <span>${phaseLabel()}</span></div>${actionPanel()}${state.pending && state.role === 'killer' ? `<div class="answer-box"><span class="eyebrow">WITNESS QUESTION</span><b>${escapeHtml(person(state.pending.id)?.name)}被问：${escapeHtml(state.questions[state.pending.questionIndex])}</b><p>${state.pending.mayLie ? '这名证人可以说谎。' : '这名证人必须说实话。'}真实答案为“${state.pending.truthful ? '是' : '否'}”。</p><div class="answer-row">${actionButton('回答：是', 'answer', { answer:true }, 'secondary', !state.pending.mayLie && !state.pending.truthful)}${actionButton('回答：否', 'answer', { answer:false }, 'secondary', !state.pending.mayLie && state.pending.truthful)}</div></div>` : ''}</div>${secretPanel()}` : ''}
       ${panelTab === 'history' ? activityPanel() : ''}
-      ${panelTab === 'notes' ? `<div class="notes-panel"><span class="eyebrow">PRIVATE NOTEBOOK</span><h3>调查笔记</h3><p>${local ? '仅当前角色可在游戏界面看到自己的笔记。' : '仅保存在当前浏览器，不会共享给对手。'}</p><textarea id="notes" placeholder="记录嫌疑人、证词、动机推断……">${escapeHtml(localStorage.getItem(noteKey()) || '')}</textarea><div class="notes-footer">自动保存</div></div><div class="motive-list"><h4>可能动机</h4>${state.motives.map(m => `<div><b>${m.name}</b><span>${m.rule}</span></div>`).join('')}</div></div>` : ''}
+      ${panelTab === 'notes' ? notesPanel() : ''}
       ${panelTab === 'rules' ? `<div class="rules-panel"><span class="eyebrow">QUICK REFERENCE</span><h3>双人逻辑模式</h3><ol><li>凶手每回合恐吓两名市民，然后按秘密动机谋杀一人。整局可放弃谋杀一次。</li><li>侦探抵达新案发街区，疏散其他市民；随后有 2 移动点和 2 种不同的调查行动。</li><li>讯问时，每名证人回答一个关于凶手外貌的是非题。凶手本人、相关人及支持者可说谎。</li><li>警局可放置监视标记。查看监视结果不消耗行动，可确认此刻能否谋杀目标。</li><li>城市阶段，双方依次按抽取的群体移动市民；现场不能进入，每街区最多三人。</li><li>第五起命案的回合结束后，侦探需同时猜中凶手身份与动机。</li></ol><a href="https://hobbyworldint.com/portfolio-item/intent-to-kill/" target="_blank" rel="noopener">查看发行方规则 ↗</a></div></div>` : ''}
     </div></aside></main>
     <section class="bottom-area"><div class="victim-row"><div class="bottom-title"><span class="eyebrow">VICTIM FILES</span><b>命案卷宗</b></div>${Array.from({length:5},(_,i) => { const v=state.victims[i]; const c=v && person(v.id); return c ? `<button class="victim-slot filled" data-victim="${c.id}" title="查看 ${escapeHtml(c.name)} 的完整档案"><span>${String(i+1).padStart(2,'0')} · 第 ${v.round} 回合</span><b>${escapeHtml(c.name)}</b><small>${escapeHtml(c.group)} · ${escapeHtml(c.sex)} · ${escapeHtml(c.age)}</small><small>${escapeHtml(c.build)} · ${escapeHtml(c.height)} · ${escapeHtml(state.blockNames[c.block])}</small></button>` : `<div class="victim-slot"><span>${String(i+1).padStart(2,'0')}</span><em>待发现</em></div>`; }).join('')}</div><div class="case-log"><div class="bottom-title"><span class="eyebrow">CASE LOG</span><b>案件日志</b></div><div class="log-scroll">${state.log.slice(0,6).map(entry => `<p><span>${String(entry.round).padStart(2,'0')}</span>${escapeHtml(entry.text)}</p>`).join('')}</div></div></section>
@@ -395,11 +431,16 @@ async function handleBlock(block) {
   }
 }
 app.addEventListener('click', async event => {
+  const evidenceButton = event.target.closest('[data-evidence-status]');
   const ui = event.target.closest('[data-ui]');
   const button = event.target.closest('[data-action]');
   const card = event.target.closest('[data-person]');
   const victim = event.target.closest('[data-victim]');
   const block = event.target.closest('[data-block]');
+  if (evidenceButton) {
+    updateEvidence(evidenceButton.dataset.evidenceKind, evidenceButton.dataset.evidenceId, evidenceButton.dataset.evidenceStatus);
+    return;
+  }
   if (ui) {
     switch (ui.dataset.ui) {
       case 'mode-offline': lobbyMode = 'offline'; render(); break;

@@ -18,6 +18,50 @@
 @media(max-width:1080px){.game-main,.bottom-area{grid-template-columns:1fr}.board{grid-template-rows:repeat(4,160px)}.side-panel{min-height:auto}.side-content{max-height:none}.bottom-area{display:block}.case-log{margin-top:12px}.lobby-main{gap:25px;padding-left:40px;padding-right:40px}.box-image{height:410px}}
 @media(max-width:700px){.lobby-shell{padding:0}.lobby-main{display:block;padding:0 24px 30px}.lobby-top{padding:24px}.lobby-copy h1{font-size:75px}.en-title{font-size:16px}.box-aside{display:none}.game-header{padding:0 12px;height:62px;gap:6px}.brand strong{font-size:16px}.brand small{font-size:6px}.brand-mark{font-size:17px}.header-middle{gap:5px}.case-label,.round-label{display:none}.phase-pill{font-size:9px;padding:5px}.header-right{gap:3px}.role-badge{font-size:9px}.icon-button{font-size:9px;padding:6px}.room-strip{padding:0 11px;gap:9px;font-size:9px}.room-strip b{font-size:10px}.game-main{padding:12px 10px}.board-heading p{display:none}.board{grid-template-rows:repeat(4,125px)}.block{padding:3px}.block-number{display:none}.block-title{font-size:9px}.building,.detective-badge,.scene-badge{font-size:7px;padding:1px 2px}.block-badges{height:24px;overflow:hidden}.block-people{height:75px;gap:1px}.person-art{height:45px}.person-name{font-size:7px}.person-meta{font-size:6px}.bottom-area{padding:0 10px 15px}.victim-row{overflow:auto}.victim-slot{min-width:72px}.bottom-title{min-width:80px}.game-footer{display:none}}
 @media(max-width:700px){.person-group{height:11px;line-height:11px;font-size:6px}.person-card .person-art{height:42px}}
+
+/* Turn ownership and private deduction notebook */
+.game-shell{transition:background .3s ease}
+.game-shell.turn-detective{background:#e6efec}
+.game-shell.turn-killer{background:#f2e6e2}
+.game-shell.turn-waiting{background:#e5e3dd}
+.turn-cue{min-height:42px;display:grid;grid-template-columns:auto auto 1fr;align-items:center;gap:12px;padding:8px 28px;border-bottom:1px solid #bfb8aa}
+.turn-cue>span{font-size:8px;letter-spacing:.15em;font-weight:900}
+.turn-cue>b{font-family:'Noto Serif SC',serif;font-size:15px}
+.turn-cue>small{font-size:10px}
+.turn-cue.active{background:#d2eadf;color:#235b4d;box-shadow:inset 5px 0 #3e8c77}
+.turn-killer .turn-cue.active{background:#efd4d2;color:#873c43;box-shadow:inset 5px 0 #b44c54}
+.turn-cue.waiting{background:#d8d6d0;color:#77736c}
+.turn-cue.waiting>small{color:#8e8980}
+.notes-panel textarea{height:230px}
+.evidence-list{border-top:1px solid #d5d0c5;margin-top:16px;padding-top:12px}
+.motive-list>.evidence-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:8px;margin-bottom:7px;padding:0;border:0;font-size:inherit;line-height:normal}
+.evidence-heading h4{font-family:'Noto Serif SC',serif;font-size:15px;margin:2px 0 0}
+.evidence-heading>small{font-size:9px;color:#938d84}
+.evidence-row{display:flex;align-items:center;gap:8px;border:1px solid #e2ddd3;border-left:3px solid #bcb6ab;background:#faf8f2;padding:8px;margin-top:6px;transition:.15s}
+.evidence-row.possible{border-color:#8eb5a1;border-left-color:#418064;background:#eef6f0}
+.evidence-row.excluded{opacity:.62;border-left-color:#a94a50;background:#eeeae6}
+.evidence-row.excluded .evidence-copy{text-decoration:line-through;color:#8a8179}
+.evidence-copy{display:flex;flex:1;min-width:0;gap:8px;font-size:10px;line-height:1.45}
+.evidence-copy>b{min-width:52px}
+.evidence-copy>span{color:#736e66}
+.evidence-controls{display:flex;flex:none;gap:4px}
+.evidence-controls button{display:flex;align-items:center;gap:3px;border:1px solid #c4bfb5;background:#fffdf8;color:#827d74;padding:4px 5px;font-size:9px;font-weight:900;border-radius:2px}
+.evidence-controls button:hover{border-color:#5e625e}
+.evidence-controls button span{color:inherit}
+.evidence-controls .possible.active{background:#39785e;border-color:#39785e;color:#fff}
+.evidence-controls .excluded.active{background:#a3444b;border-color:#a3444b;color:#fff}
+.group-list{margin-top:20px}
+.evidence-help{font-size:10px;color:#817b72;margin:0 0 8px}
+.group-evidence{border-left-color:var(--evidence-color)}
+.group-evidence .evidence-copy{align-items:center}
+.group-evidence .evidence-copy>i{width:9px;height:9px;border-radius:50%;background:var(--evidence-color);box-shadow:0 0 0 2px #fff,0 0 0 3px var(--evidence-color)}
+.group-evidence .evidence-copy>b{min-width:0;font-size:11px}
+@media(max-width:700px){
+  .turn-cue{grid-template-columns:auto 1fr;padding:7px 12px;gap:4px 9px}
+  .turn-cue>small{grid-column:2;font-size:8px}
+  .evidence-controls button span{display:none}
+  .evidence-controls button{width:27px;justify-content:center;font-size:12px}
+}
 .mode-heading{display:flex;align-items:center;gap:10px;margin-bottom:10px}.mode-heading b{display:block;font-size:13px;color:#272b30}.mode-heading small{display:block;font-size:10px;color:#857e73;margin-top:2px}.mode-number{font-size:10px;font-weight:900;color:#fff;background:#a64049;min-width:25px;height:25px;display:grid;place-items:center;border-radius:50%}.local-start{margin-bottom:1px}.mode-divider{height:1px;background:#d0c8bc;margin:17px 0}.handoff-shell{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 35%,#46434a,#21252d 70%);position:relative}.handoff-shell:before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 5px,#fff1 6px 7px);opacity:.22}.handoff-card{width:min(470px,100%);background:#f2eee4;color:#292a2d;padding:30px 38px 22px;text-align:center;box-shadow:12px 14px 0 #a83c464f,0 30px 70px #0007;position:relative;border-top:7px solid #aa444a}.handoff-card.detective{border-top-color:#547d90;box-shadow:12px 14px 0 #547d9055,0 30px 70px #0007}.handoff-top{display:flex;justify-content:space-between;color:#777268;font-size:9px;font-weight:900;letter-spacing:.18em}.handoff-symbol{font-size:70px;line-height:1;color:#a9434a;margin:25px 0 14px}.handoff-card.detective .handoff-symbol{color:#547d90}.handoff-card h1{font-family:'Noto Serif SC',serif;font-size:33px;margin:5px 0 12px}.handoff-card p{font-size:13px;line-height:1.9;color:#6f6a61;margin:0 auto 25px;max-width:340px}.handoff-card .primary{width:100%;display:flex;justify-content:space-between;align-items:center;padding:14px 17px}.handoff-bottom{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #d2cbbd;margin-top:26px;padding-top:14px;color:#948d81;font-size:10px}.handoff-bottom button{border:none;background:transparent;color:#867970;text-decoration:underline;font-size:10px}
 @media(max-width:700px){.handoff-card{padding:24px}.handoff-card h1{font-size:27px}.mode-heading small{font-size:9px}}
 .single-number{background:#3f7888}.single-start{background:#356f80}.single-start:hover{background:#285d6c}.ai-badge{font-size:10px;font-weight:900;letter-spacing:.06em;color:#d8f0e9;border:1px solid #5d8e86;background:#38545a;padding:7px 10px;border-radius:2px;white-space:nowrap}
